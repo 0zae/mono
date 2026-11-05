@@ -346,8 +346,17 @@ function setupBackup(){
   $("exp").onclick = async ()=>{
     const data = await api("GET","export");
     const name = `mono-backup-${TODAY}.json`;
+    // iOS 앱: 임시 폴더에 파일을 쓰고 공유 시트로 넘긴다
+    const P = window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins;
+    if(P && P.Filesystem && P.Share){
+      try{
+        const w = await P.Filesystem.writeFile({path:name, data:JSON.stringify(data), directory:"CACHE", encoding:"utf8"});
+        await P.Share.share({title:name, files:[w.uri]});
+      }catch(e){ if(!/cancel/i.test(e?.message||"")) flash("백업 파일을 만들지 못했어요."); }
+      return;
+    }
     const file = new File([JSON.stringify(data)], name, {type:"application/json"});
-    // 아이폰: 공유 시트로 파일 앱·AirDrop에 저장 / 그 밖: 바로 다운로드
+    // 웹(아이폰 Safari): 공유 시트로 파일 앱·AirDrop에 저장 / 그 밖: 바로 다운로드
     try{ if(navigator.canShare && navigator.canShare({files:[file]})) return await navigator.share({files:[file], title:name}); }catch(e){ if(e.name==="AbortError") return; }
     const a = document.createElement("a"); a.href = URL.createObjectURL(file); a.download = name; a.click();
     setTimeout(()=>URL.revokeObjectURL(a.href), 1000);
@@ -511,4 +520,5 @@ async function renameCat(from,to){
 boot();
 q.focus();
 
-if("serviceWorker" in navigator && (location.protocol==="https:" || location.hostname==="localhost")) navigator.serviceWorker.register("./sw.js").catch(()=>{});
+// iOS 앱 안에서는 파일이 이미 앱에 들어 있어서 서비스 워커가 필요 없다
+if("serviceWorker" in navigator && !window.Capacitor?.isNativePlatform?.() && (location.protocol==="https:" || location.hostname==="localhost")) navigator.serviceWorker.register("./sw.js").catch(()=>{});

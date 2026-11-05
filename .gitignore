@@ -3,3 +3,5 @@ node_modules/
 *.db
 *.db-*
 .DS_Store
+ios/App/App/public/
+ios/DerivedData/
