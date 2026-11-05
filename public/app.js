@@ -155,9 +155,12 @@ function preview(){
     `<span>${dayLabel(draft.date)}</span><span class="sep">·</span><span>${esc(draft.memo)}</span>`;
 }
 q.addEventListener("input", ()=>{ lastAdded=null; preview(); });
+// 첫 화면의 빈 곳을 누르면 키보드 내리기
+document.querySelector(".home").addEventListener("pointerdown", e=>{ if(!e.target.closest("form, button, a")) q.blur(); });
 $("form").addEventListener("submit", e=>{
   e.preventDefault();
-  if(!draft || !(draft.amount>0)){ if(q.value.trim()) flash("금액을 함께 적어 주세요. 예: 점심 9,000원"); return; }
+  if(!q.value.trim()){ q.blur(); return; } // 빈 칸에서 ✓: 키보드 내리기
+  if(!draft || !(draft.amount>0)){ flash("금액을 함께 적어 주세요. 예: 점심 9,000원"); return; }
   const it = {id:uid(), ts:Date.now(), d:draft.date, t:draft.type, a:draft.amount, c:draft.cat||FALLBACK, m:draft.memo};
   if(draft.method){ it.p = draft.method.id; it.pn = draft.method.name; }
   it.r = draft.raw;
@@ -383,6 +386,8 @@ const asOpen = () => $("as").classList.contains("on");
 function showAS(html){ const as=$("as"); as.innerHTML=html; $("scrim2").classList.add("on"); as.classList.add("on"); return as; }
 function closeAS(){ $("as").classList.remove("on"); $("scrim2").classList.remove("on"); }
 $("scrim2").onclick=closeAS;
+// 시트 안에서 입력칸을 누르면 그 칸이 보이게
+$("as").addEventListener("focusin", e=>{ setTimeout(()=>e.target.scrollIntoView({block:"nearest"}), 300); });
 
 $("scroll").addEventListener("click", e=>{
   const t=e.target.closest("[data-id]"); if(t) return openTx(t.dataset.id);
@@ -517,8 +522,28 @@ async function renameCat(from,to){
   renderHome();
 }
 
+// 첫 화면 높이는 키보드가 없을 때 높이로 고정: 키보드가 떠서 화면이 줄어도 로고와 입력창이 움직이지 않게
+let homeH = window.innerHeight;
+const setHomeH = ()=>document.documentElement.style.setProperty("--homeH", homeH+"px");
+setHomeH();
+window.addEventListener("resize", ()=>{ if(window.innerHeight > homeH){ homeH = window.innerHeight; setHomeH(); } });
+window.addEventListener("orientationchange", ()=>setTimeout(()=>{ homeH = window.innerHeight; setHomeH(); }, 400));
 boot();
 q.focus();
+
+// 키보드가 올라와도 로고는 화면 맨 위에: iOS가 화면을 밀어 올린 만큼(visualViewport.offsetTop) 되돌린다
+const logo = document.querySelector(".logo");
+const pinLogo = ()=>{
+  const vv = window.visualViewport;
+  logo.style.transform = vv && vv.offsetTop ? `translateY(${vv.offsetTop}px)` : "";
+  // 키보드 높이: 아래에서 올라오는 시트와 설정 목록을 그만큼 위로
+  const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
+  document.documentElement.style.setProperty("--kb", kb+"px");
+};
+window.visualViewport?.addEventListener("resize", pinLogo);
+window.visualViewport?.addEventListener("scroll", pinLogo);
+// 첫 화면이 통째로 밀려 올라가지 않게
+window.addEventListener("scroll", ()=>{ if(!sheetOpen && window.scrollY) window.scrollTo(0,0); });
 
 // iOS 앱 안에서는 파일이 이미 앱에 들어 있어서 서비스 워커가 필요 없다
 if("serviceWorker" in navigator && !window.Capacitor?.isNativePlatform?.() && (location.protocol==="https:" || location.hostname==="localhost")) navigator.serviceWorker.register("./sw.js").catch(()=>{});

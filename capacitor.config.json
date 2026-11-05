@@ -6,5 +6,11 @@
   "ios": {
     "contentInset": "never",
     "backgroundColor": "#FFFFFF"
+  },
+  "plugins": {
+    "Keyboard": {
+      "resize": "native",
+      "resizeOnFullScreen": true
+    }
   }
 }
