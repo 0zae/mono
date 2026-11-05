@@ -542,7 +542,10 @@ const pinLogo = ()=>{
   // 키보드 높이: 아래에서 올라오는 시트와 설정 목록을 그만큼 위로
   const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
   document.documentElement.style.setProperty("--kb", kb+"px");
+  // 키보드가 떠 있는지: 웹은 visualViewport, 앱은 화면 자체가 줄어든 것으로 판단
+  document.documentElement.classList.toggle("kb-open", kb > 80 || window.innerHeight < homeH - 120);
 };
+window.addEventListener("resize", pinLogo);
 window.visualViewport?.addEventListener("resize", pinLogo);
 window.visualViewport?.addEventListener("scroll", pinLogo);
 // 첫 화면이 통째로 밀려 올라가지 않게
