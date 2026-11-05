@@ -526,6 +526,9 @@ async function renameCat(from,to){
 let homeH = window.innerHeight;
 const setHomeH = ()=>document.documentElement.style.setProperty("--homeH", homeH+"px");
 setHomeH();
+// 아래 안전 영역(홈 인디케이터) 높이도 처음 값으로 고정
+{ const probe = document.createElement("div"); probe.style.cssText = "position:fixed;bottom:0;height:env(safe-area-inset-bottom,0px)";
+  document.body.appendChild(probe); document.documentElement.style.setProperty("--sab", probe.offsetHeight+"px"); probe.remove(); }
 window.addEventListener("resize", ()=>{ if(window.innerHeight > homeH){ homeH = window.innerHeight; setHomeH(); } });
 window.addEventListener("orientationchange", ()=>setTimeout(()=>{ homeH = window.innerHeight; setHomeH(); }, 400));
 boot();
