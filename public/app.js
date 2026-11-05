@@ -536,14 +536,24 @@ q.focus();
 
 // 키보드가 올라와도 로고는 화면 맨 위에: iOS가 화면을 밀어 올린 만큼(visualViewport.offsetTop) 되돌린다
 const logo = document.querySelector(".logo");
+const setKb = kb=>{
+  // 키보드 높이: '내역 보기', 아래에서 올라오는 시트, 설정 목록을 그만큼 위로
+  document.documentElement.style.setProperty("--kb", kb+"px");
+  document.documentElement.classList.toggle("kb-open", kb > 80);
+};
+// iOS 앱: 키보드가 화면 위에 그냥 겹쳐 뜨게 하고(뒤에 바탕이 깔리지 않게), 높이는 플러그인이 알려 준다
+const KB = window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.Keyboard;
+if(KB){
+  KB.setScroll?.({isDisabled:true}).catch?.(()=>{});
+  KB.addListener("keyboardWillShow", info=>setKb(info.keyboardHeight||0));
+  KB.addListener("keyboardWillHide", ()=>setKb(0));
+}
+// 웹: iOS Safari가 화면을 밀어 올린 만큼 로고를 되돌리고, 키보드 높이는 visualViewport로
 const pinLogo = ()=>{
+  if(KB) return;
   const vv = window.visualViewport;
   logo.style.transform = vv && vv.offsetTop ? `translateY(${vv.offsetTop}px)` : "";
-  // 키보드 높이: 아래에서 올라오는 시트와 설정 목록을 그만큼 위로
-  const kb = vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0;
-  document.documentElement.style.setProperty("--kb", kb+"px");
-  // 키보드가 떠 있는지: 웹은 visualViewport, 앱은 화면 자체가 줄어든 것으로 판단
-  document.documentElement.classList.toggle("kb-open", kb > 80 || window.innerHeight < homeH - 120);
+  setKb(vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0);
 };
 window.addEventListener("resize", pinLogo);
 window.visualViewport?.addEventListener("resize", pinLogo);

@@ -5,12 +5,13 @@
   "backgroundColor": "#FFFFFF",
   "ios": {
     "contentInset": "never",
-    "backgroundColor": "#FFFFFF"
+    "backgroundColor": "#FFFFFF",
+    "scrollEnabled": false
   },
   "plugins": {
     "Keyboard": {
-      "resize": "native",
-      "resizeOnFullScreen": true
+      "resize": "none",
+      "resizeOnFullScreen": false
     }
   }
 }
