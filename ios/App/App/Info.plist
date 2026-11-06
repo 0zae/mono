@@ -66,5 +66,9 @@
 	</array>
 	<key>UIViewControllerBasedStatusBarAppearance</key>
 	<true/>
+	<key>NSCameraUsageDescription</key>
+	<string>영수증을 찍어 금액과 상호를 자동으로 입력하는 데 사용해요.</string>
+	<key>NSPhotoLibraryUsageDescription</key>
+	<string>보관함의 영수증 사진을 읽어 금액과 상호를 자동으로 입력하는 데 사용해요.</string>
 </dict>
 </plist>

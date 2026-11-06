@@ -135,6 +135,7 @@ async function load(){
     S.months = {};
     s.items.forEach(i=>(S.months[i.d.slice(0,7)] ||= []).push(i));
     applySettings(s.settings); S.ai = s.ai;
+    loaded = true;
     $("ai").textContent = s.ai ? "Gemini가 텍스트를 인식해요" : "Gemini 꺼짐 · 설정에서 키를 넣으면 켜져요";
   }catch(e){ flash("저장된 기록을 불러오지 못했어요. 개인정보 보호 모드에서는 저장이 안 될 수 있어요."); }
   renderHome(); if(sheetOpen) renderSheet();
@@ -203,11 +204,12 @@ async function understandItem(it, d, retry){
 }
 function flash(msg){ under.innerHTML=`<span class="done"></span>`; under.firstChild.textContent=msg; }
 const CHEV = `<svg width="8" height="13" viewBox="0 0 8 13" aria-hidden="true"><path d="M1.5 1.5 6.5 6.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-let shownOut = null, animId = 0;
+let shownOut = null, animId = 0, loaded = false;
 function renderHome(){
   const list = items(THIS_YM);
   const out = list.filter(i=>i.t==="out").reduce((s,i)=>s+i.a,0);
-  if(!list.length){ $("open").innerHTML = `내역 보기 ${CHEV}`; shownOut = null; return; }
+  // 기록을 불러온 뒤에 비어 있으면 0원에서 시작: 이번 달 첫 기록도 숫자가 올라가게
+  if(!list.length){ $("open").innerHTML = `내역 보기 ${CHEV}`; shownOut = loaded ? 0 : null; return; }
   $("open").innerHTML = `이번 달 <b class="num" id="outNum"></b> 사용 ${CHEV}`;
   countTo(out);
 }
@@ -216,9 +218,10 @@ function countTo(target){
   const el = $("outNum");
   cancelAnimationFrame(animId);
   const from = shownOut ?? target;
-  if(from===target || matchMedia("(prefers-reduced-motion: reduce)").matches){ shownOut = target; el.textContent = won(target)+"원"; return; }
-  if(target>from){ el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
-  const t0 = performance.now(), dur = 800;
+  if(from===target){ shownOut = target; el.textContent = won(target)+"원"; return; }
+  // 숫자가 올라가는 건 항상, 커졌다 작아지는 효과는 '동작 줄이기'가 꺼져 있을 때만
+  if(target>from && !matchMedia("(prefers-reduced-motion: reduce)").matches){ el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
+  const t0 = performance.now(), dur = 900;
   const step = now=>{
     const p = Math.min(1,(now-t0)/dur), e = 1-Math.pow(1-p,3);
     shownOut = Math.round(from+(target-from)*e);
@@ -279,8 +282,8 @@ function remove(id){
 }
 
 /* ---------- sheet ---------- */
-let sheetOpen=false, editingBudget=false, view="list";
-function openSheet(v){ q.blur(); window.scrollTo(0,0); sheetOpen=true; view=v||"list"; S.view=THIS_YM; renderSheet(); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
+let sheetOpen=false, editingBudget=false, view="list", txOpen=false;
+function openSheet(v){ q.blur(); window.scrollTo(0,0); txOpen=false; sheetOpen=true; view=v||"list"; S.view=THIS_YM; renderSheet(); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
 function closeSheet(){ sheetOpen=false; editingBudget=false; $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); closeAS(); q.focus(); }
 $("open").onclick=()=>openSheet(); $("close").onclick=closeSheet; $("scrim").onclick=closeSheet;
 $("gear").onclick=()=>{ view="settings"; renderSheet(); };
@@ -319,9 +322,9 @@ function renderSheet(){
       h += `<div class="cap"><span>결제수단</span></div><div class="group">`+
         pays.map(([n,v])=>`<div class="cell"><span class="ico" style="background:${isCash(n)?"var(--k-green)":"var(--label3)"}">${payIcon(n)}</span><span class="t"><span></span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}%</span></div>`).join("")+`</div>`;
     }
-    h += `<h2 class="sec">내역</h2>`;
+    h += `<h2 class="sec">내역</h2><div class="group"><button class="cell toggle" id="txToggle" aria-expanded="${txOpen}"><span class="t"><span>내역 ${list.length}건</span><small></small></span><span class="r chev${txOpen?" open":""}">${CHEV}</span></button></div>`;
     const days={}; list.forEach(i=>(days[i.d] ||= []).push(i));
-    Object.keys(days).sort().reverse().forEach(d=>{
+    if(txOpen) Object.keys(days).sort().reverse().forEach(d=>{
       const net=days[d].reduce((s,i)=>s+(i.t==="in"?i.a:-i.a),0);
       h += `<div class="cap"><span>${dayLabel(d)}</span><span class="num">${net>0?"+":""}${won(net)}원</span></div><div class="group">`+
         days[d].map(i=>{ const mn=methodName(i);
@@ -329,6 +332,12 @@ function renderSheet(){
     });
   }
   $("scroll").innerHTML = h;
+  const tt = $("txToggle");
+  if(tt){
+    const last = list[0];
+    tt.querySelector("small").textContent = `최근: ${last.m} ${last.t==="in"?"+":"-"}${won(last.a)}원 · ${dayLabel(last.d)}`;
+    tt.onclick = ()=>{ txOpen = !txOpen; const y = $("scroll").scrollTop; renderSheet(); $("scroll").scrollTop = y; };
+  }
   $("prev").onclick=()=>{ S.view=shiftYm(S.view,-1); renderSheet(); };
   $("next").disabled = ym>=THIS_YM;
   $("next").onclick=()=>{ if(S.view<THIS_YM){ S.view=shiftYm(S.view,1); renderSheet(); } };
