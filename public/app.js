@@ -146,8 +146,9 @@ let draft=null, lastAdded=null, flashTimer;
 function preview(){
   draft = parse(q.value);
   go.hidden = !(draft && draft.amount>0);
+  $("cam").hidden = !!q.value.trim();
   if(!draft){ under.innerHTML=""; return; }
-  const c = draft.cat || "자동 분류";
+  const c = draft.cat || "카테고리 자동";
   const pm = draft.method ? `<span class="sep">·</span><span class="tag" style="${draft.methodGuessed?"":"color:var(--label)"}">${esc(draft.method.name)}${draft.unregistered?" (미등록)":""}</span>` : "";
   under.innerHTML =
     `<span class="amt num ${draft.type}">${draft.amount ? (draft.type==="in"?"+":"")+won(draft.amount)+"원" : "금액?"}</span><span class="sep">·</span>`+
@@ -167,7 +168,7 @@ $("form").addEventListener("submit", e=>{
   const ym = it.d.slice(0,7);
   (S.months[ym] ||= []).push(it);
   const d = draft;
-  q.value=""; go.hidden=true; lastAdded=it;
+  q.value=""; go.hidden=true; $("cam").hidden=false; lastAdded=it;
   showDone(it, !d.cat);
   renderHome(); if(sheetOpen) renderSheet();
   api("POST","items",it).then(()=>understandItem(it, d)).catch(fail);
@@ -202,11 +203,65 @@ async function understandItem(it, d, retry){
 }
 function flash(msg){ under.innerHTML=`<span class="done"></span>`; under.firstChild.textContent=msg; }
 const CHEV = `<svg width="8" height="13" viewBox="0 0 8 13" aria-hidden="true"><path d="M1.5 1.5 6.5 6.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+let shownOut = null, animId = 0;
 function renderHome(){
   const list = items(THIS_YM);
   const out = list.filter(i=>i.t==="out").reduce((s,i)=>s+i.a,0);
-  $("open").innerHTML = list.length ? `이번 달 <b class="num">${won(out)}원</b> 사용 ${CHEV}` : `내역 보기 ${CHEV}`;
+  if(!list.length){ $("open").innerHTML = `내역 보기 ${CHEV}`; shownOut = null; return; }
+  $("open").innerHTML = `이번 달 <b class="num" id="outNum"></b> 사용 ${CHEV}`;
+  countTo(out);
 }
+// 금액이 바뀌면 숫자가 굴러가듯 바뀐다 (처음 열 때는 바로 표시)
+function countTo(target){
+  const el = $("outNum");
+  cancelAnimationFrame(animId);
+  const from = shownOut ?? target;
+  if(from===target || matchMedia("(prefers-reduced-motion: reduce)").matches){ shownOut = target; el.textContent = won(target)+"원"; return; }
+  if(target>from){ el.classList.remove("bump"); void el.offsetWidth; el.classList.add("bump"); }
+  const t0 = performance.now(), dur = 800;
+  const step = now=>{
+    const p = Math.min(1,(now-t0)/dur), e = 1-Math.pow(1-p,3);
+    shownOut = Math.round(from+(target-from)*e);
+    el.textContent = won(shownOut)+"원";
+    if(p<1) animId = requestAnimationFrame(step); else setTimeout(()=>el.classList.remove("bump"), 300);
+  };
+  animId = requestAnimationFrame(step);
+}
+
+/* ---------- 영수증 ---------- */
+// 사진을 줄여서(긴 변 1600px JPEG) Gemini에 보낸다
+async function shrinkImage(file){
+  const url = URL.createObjectURL(file);
+  try{
+    const img = await new Promise((ok,no)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=no; i.src=url; });
+    const k = Math.min(1, 1600/Math.max(img.naturalWidth, img.naturalHeight));
+    const c = document.createElement("canvas");
+    c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
+    c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
+    return { mime:"image/jpeg", data: c.toDataURL("image/jpeg", .85).split(",")[1] };
+  } finally { URL.revokeObjectURL(url); }
+}
+// 읽은 결과를 입력칸에 한 줄로: 확인하고 ✓를 누르면 기록
+function receiptLine(r){
+  const parts = [];
+  if(r.date && r.date!==TODAY){ const [,m,d] = r.date.split("-").map(Number); parts.push(`${m}월 ${d}일`); }
+  parts.push(r.merchant || "영수증", won(r.total)+"원");
+  if(r.payment) parts.push(r.payment);
+  return parts.join(" ");
+}
+$("camFile").addEventListener("change", async e=>{
+  const f = e.target.files[0]; e.target.value = "";
+  if(!f) return;
+  const cam = $("cam"); cam.classList.add("busy");
+  flash("영수증 읽는 중…");
+  try{
+    const r = await api("POST","receipt", await shrinkImage(f));
+    if(r.error){ flash(r.error); return; }
+    q.value = receiptLine(r); preview();
+    q.focus();
+  }catch(err){ flash("영수증을 읽지 못했어요. 다시 찍어 주세요."); }
+  finally{ cam.classList.remove("busy"); }
+});
 
 /* ---------- edits ---------- */
 function find(id){ for(const ym in S.months){ const i=S.months[ym].findIndex(x=>x.id===id); if(i>-1) return [ym,i]; } return [null,-1]; }
@@ -225,7 +280,7 @@ function remove(id){
 
 /* ---------- sheet ---------- */
 let sheetOpen=false, editingBudget=false, view="list";
-function openSheet(v){ sheetOpen=true; view=v||"list"; S.view=THIS_YM; renderSheet(); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
+function openSheet(v){ q.blur(); window.scrollTo(0,0); sheetOpen=true; view=v||"list"; S.view=THIS_YM; renderSheet(); $("scrim").classList.add("on"); $("sheet").classList.add("on"); }
 function closeSheet(){ sheetOpen=false; editingBudget=false; $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); closeAS(); q.focus(); }
 $("open").onclick=()=>openSheet(); $("close").onclick=closeSheet; $("scrim").onclick=closeSheet;
 $("gear").onclick=()=>{ view="settings"; renderSheet(); };
@@ -256,20 +311,21 @@ function renderSheet(){
   if(!list.length){ h += `<div class="empty">${+m}월에는 기록이 없어요.</div>`; }
   else{
     const cats=sumBy(outs, i=>i.c);
-    h += `<div class="cap"><span>분류</span><span class="num">${inc?"수입 +"+won(inc)+"원":""}</span></div><div class="group">`+
-      (cats.length?cats.map(([c,v])=>`<div class="cell"><span class="ico" style="background:${color(c)}">${esc(c[0])}</span><span class="t"><span>${esc(c)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}%</span></div>`).join("")
+    h += `<h2 class="sec">분석</h2><div class="cap"><span>카테고리</span><span class="num">${inc?"수입 +"+won(inc)+"원":""}</span></div><div class="group">`+
+      (cats.length?cats.map(([c,v])=>`<div class="cell"><span class="cdot" style="background:${color(c)}"></span><span class="t"><span>${esc(c)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}%</span></div>`).join("")
         :`<div class="cell"><span class="t"><small>지출이 없어요</small></span></div>`)+`</div>`;
     const pays=sumBy(outs, i=>methodName(i)||"미지정");
     if(pays.length){
       h += `<div class="cap"><span>결제수단</span></div><div class="group">`+
         pays.map(([n,v])=>`<div class="cell"><span class="ico" style="background:${isCash(n)?"var(--k-green)":"var(--label3)"}">${payIcon(n)}</span><span class="t"><span></span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}%</span></div>`).join("")+`</div>`;
     }
+    h += `<h2 class="sec">내역</h2>`;
     const days={}; list.forEach(i=>(days[i.d] ||= []).push(i));
     Object.keys(days).sort().reverse().forEach(d=>{
       const net=days[d].reduce((s,i)=>s+(i.t==="in"?i.a:-i.a),0);
       h += `<div class="cap"><span>${dayLabel(d)}</span><span class="num">${net>0?"+":""}${won(net)}원</span></div><div class="group">`+
         days[d].map(i=>{ const mn=methodName(i);
-          return `<button class="cell" data-id="${i.id}"><span class="ico" style="background:${color(i.c)}">${esc(i.c[0])}</span><span class="t"><span>${esc(i.m)}</span><small>${esc(i.c)}${mn?" · "+esc(mn):""}${i.rec?" · 정기":""}</small></span><span class="r num ${i.t}">${i.t==="in"?"+":"-"}${won(i.a)}원</span></button>`; }).join("")+`</div>`;
+          return `<button class="cell" data-id="${i.id}"><span class="cdot" style="background:${color(i.c)}"></span><span class="t"><span>${esc(i.m)}</span><small>${esc(i.c)}${mn?" · "+esc(mn):""}${i.rec?" · 정기":""}</small></span><span class="r num ${i.t}">${i.t==="in"?"+":"-"}${won(i.a)}원</span></button>`; }).join("")+`</div>`;
     });
   }
   $("scroll").innerHTML = h;
@@ -296,14 +352,14 @@ function renderSettings(){
   h += `<p class="foot-note">입력에 결제수단 이름이나 별칭이 들어 있으면 그 수단으로 기록해요. 예: "점심 9천 현대카드", "택시 1.2만 토스로". 없으면 기본 수단으로 기록해요.</p>`;
   const recTotal = S.recurring.filter(r=>!r.paused).reduce((a,r)=>a+r.amount,0);
   h += `<div class="cap"><span>정기 결제</span><span class="num">${S.recurring.length?"매월 "+won(recTotal)+"원":""}</span></div><div class="group">`+
-    S.recurring.slice().sort((a,b)=>a.day-b.day).map(r=>`<button class="cell" data-rec="${esc(r.id)}"><span class="ico" style="background:${r.paused?"var(--label3)":color(r.cat)}">${esc((r.cat||"기")[0])}</span><span class="t"><span></span><small></small></span><span class="r num">${won(r.amount)}원 ${CHEV}</span></button>`).join("")+
+    S.recurring.slice().sort((a,b)=>a.day-b.day).map(r=>`<button class="cell" data-rec="${esc(r.id)}"><span class="cdot" style="background:${r.paused?"var(--label3)":color(r.cat)}"></span><span class="t"><span></span><small></small></span><span class="r num">${won(r.amount)}원 ${CHEV}</span></button>`).join("")+
     `<button class="cell" data-rec="__new"><span class="t"><span style="color:var(--blue)">정기 결제 추가</span></span></button></div>`;
   h += `<p class="foot-note">매월 결제일이 되면 내역에 자동으로 기록돼요. 앱을 며칠 안 열어도 다음에 열 때 빠짐없이 채워져요.</p>`;
-  h += `<div class="cap"><span>분류</span></div><div class="group">
-    <button class="cell toggle" id="catToggle" aria-expanded="${catsOpen}"><span class="t"><span>분류 ${S.cats.length}개</span><small>${esc(S.cats.map(c=>c.name).join(", "))}</small></span><span class="r chev${catsOpen?" open":""}">${CHEV}</span></button>`+
-    (catsOpen ? S.cats.map(c=>`<button class="cell" data-cat="${c.id}"><span class="ico" style="background:${color(c.name)}">${esc(c.name[0])}</span><span class="t"><span>${esc(c.name)}</span><small>${c.keys.length?esc(c.keys.slice(0,4).join(", "))+(c.keys.length>4?` 외 ${c.keys.length-4}개`:""):"키워드 없음"}</small></span><span class="r">${CHEV}</span></button>`).join("")+
-    `<button class="cell" data-cat="__new"><span class="t"><span style="color:var(--blue)">분류 추가</span></span></button>` : "")+`</div>`;
-  h += `<p class="foot-note">키워드가 들어 있는 입력은 바로 그 분류로 들어가요. 키워드에 없는 상호는 Gemini가 이 분류 중에서 골라요.</p>`;
+  h += `<div class="cap"><span>카테고리</span></div><div class="group">
+    <button class="cell toggle" id="catToggle" aria-expanded="${catsOpen}"><span class="t"><span>카테고리 ${S.cats.length}개</span><small>${esc(S.cats.map(c=>c.name).join(", "))}</small></span><span class="r chev${catsOpen?" open":""}">${CHEV}</span></button>`+
+    (catsOpen ? S.cats.map(c=>`<button class="cell" data-cat="${c.id}"><span class="cdot" style="background:${color(c.name)}"></span><span class="t"><span>${esc(c.name)}</span><small>${c.keys.length?esc(c.keys.slice(0,4).join(", "))+(c.keys.length>4?` 외 ${c.keys.length-4}개`:""):"키워드 없음"}</small></span><span class="r">${CHEV}</span></button>`).join("")+
+    `<button class="cell" data-cat="__new"><span class="t"><span style="color:var(--blue)">카테고리 추가</span></span></button>` : "")+`</div>`;
+  h += `<p class="foot-note">키워드가 들어 있는 입력은 바로 그 카테고리로 들어가요. 키워드에 없는 상호는 Gemini가 이 카테고리 중에서 골라요.</p>`;
   h += `<div class="cap"><span>Gemini</span></div><div class="group"><form class="cell" id="gForm"><span class="t"><input class="inline" id="gKey" type="password" autocomplete="off" spellcheck="false" placeholder="API 키 붙여넣기" aria-label="Gemini API 키"></span><button class="edit" type="submit">저장</button></form></div>
     <p class="foot-note" id="gNote">키는 이 기기 안에만 저장되고 백업 파일에도 들어가지 않아요. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">키 발급받기</a></p>`;
   h += `<div class="cap"><span>백업</span></div><div class="group">
@@ -398,7 +454,7 @@ $("scroll").addEventListener("click", e=>{
 function openTx(id){
   const [ym,i]=find(id); if(!ym) return; const it=S.months[ym][i];
   const as = showAS(`<div class="g"><div class="h"></div>
-    <div class="sub">분류</div><div class="chips">${allCats().map(c=>`<button data-c="${esc(c)}" class="${c===it.c?"sel":""}"><i style="background:${c===it.c?"#fff":color(c)}"></i>${esc(c)}</button>`).join("")}</div>
+    <div class="sub">카테고리</div><div class="chips">${allCats().map(c=>`<button data-c="${esc(c)}" class="${c===it.c?"sel":""}"><i style="background:${c===it.c?"#fff":color(c)}"></i>${esc(c)}</button>`).join("")}</div>
     <div class="sub">결제수단</div><div class="chips">${S.methods.map(m=>`<button data-p="${m.id}" class="${m.id===it.p?"sel":""}"></button>`).join("")}</div>
     <button class="btn red" id="asDel">삭제</button></div><div class="g"><button class="btn b" id="asCancel">닫기</button></div>`);
   as.querySelector(".h").textContent = `${it.m} · ${won(it.a)}원 · ${dayLabel(it.d)}`;
@@ -436,7 +492,7 @@ function openCat(cid){
   if(!c) return;
   const used = items().filter(i=>i.c===c.name).length;
   let pick = c.color;
-  const as = showAS(`<form class="g" id="cForm"><div class="h">${isNew?"분류 추가":"분류 편집"}</div>
+  const as = showAS(`<form class="g" id="cForm"><div class="h">${isNew?"카테고리 추가":"카테고리 편집"}</div>
     <div class="fields"><input id="cName" placeholder="이름 (예: 반려동물)" aria-label="이름" maxlength="10">
     <textarea id="cKeys" placeholder="키워드, 쉼표로 구분 (예: 사료, 동물병원, 간식)" aria-label="키워드"></textarea></div>
     <div class="swatches">${COLORS.map(k=>`<button type="button" data-col="${k}" aria-label="${k}" class="${k===pick?"sel":""}" style="background:var(--k-${k})"></button>`).join("")}</div>
@@ -477,7 +533,7 @@ function openRec(rid){
       <input id="rAmt" class="num" inputmode="numeric" placeholder="금액 (예: 17,000)" aria-label="금액">
       <label class="day-row">매월 <input id="rDay" class="num" type="number" min="1" max="31" inputmode="numeric" aria-label="결제일"> 일</label>
     </div>
-    <div class="sub">분류</div><div class="chips" id="rCats">${S.cats.map(c=>`<button type="button" data-rc="${esc(c.name)}"><i style="background:${color(c.name)}"></i>${esc(c.name)}</button>`).join("")}</div>
+    <div class="sub">카테고리</div><div class="chips" id="rCats">${S.cats.map(c=>`<button type="button" data-rc="${esc(c.name)}"><i style="background:${color(c.name)}"></i>${esc(c.name)}</button>`).join("")}</div>
     <div class="sub">결제수단</div><div class="chips" id="rPays">${S.methods.map(m=>`<button type="button" data-rp="${esc(m.id)}"></button>`).join("")}</div>
     <div class="hint-line" id="rHint"></div>
     <button class="btn b" type="submit">저장</button>
@@ -559,7 +615,7 @@ window.addEventListener("resize", pinLogo);
 window.visualViewport?.addEventListener("resize", pinLogo);
 window.visualViewport?.addEventListener("scroll", pinLogo);
 // 첫 화면이 통째로 밀려 올라가지 않게
-window.addEventListener("scroll", ()=>{ if(!sheetOpen && window.scrollY) window.scrollTo(0,0); });
+window.addEventListener("scroll", ()=>{ if(window.scrollY) window.scrollTo(0,0); });
 
 // iOS 앱 안에서는 파일이 이미 앱에 들어 있어서 서비스 워커가 필요 없다
 if("serviceWorker" in navigator && !window.Capacitor?.isNativePlatform?.() && (location.protocol==="https:" || location.hostname==="localhost")) navigator.serviceWorker.register("./sw.js").catch(()=>{});

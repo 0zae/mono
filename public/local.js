@@ -12,6 +12,7 @@ export const DEFAULT_CATS = [
   {id:"fun",name:"문화",color:"purple",keys:["영화","cgv","메가박스","넷플릭스","유튜브","구독","공연","책","게임","스포티파이","멜론","전시","티빙","쿠팡플레이","여행","숙소","호텔"]},
   {id:"med",name:"의료",color:"green",keys:["병원","약국","약","치과","한의원","안과","진료","피부과"]},
   {id:"meet",name:"모임",color:"red",keys:["술","맥주","소주","회식","모임","선물","경조사","축의금","부조","생일"]},
+  {id:"night",name:"유흥",color:"mint",keys:["노래방","코인노래방","클럽","라운지","펍","포차","이자카야","호프","술집","와인바","칵테일","pc방","피시방","당구","볼링","오락실","방탈출"]},
   {id:"etc",name:"기타",color:"gray",keys:[]}
 ];
 const INCOME = "수입";
@@ -66,6 +67,25 @@ async function learn(s, memo, name, cat, src) {
   }
 }
 
+// 앱 업데이트로 새로 생긴 기본 카테고리를 이미 쓰던 기기에도 한 번만 추가 (지운 뒤에는 다시 넣지 않는다)
+const NEW_DEFAULT_CATS = ["night"];
+async function addNewDefaultCats() {
+  const saved = await get("kv", "settings");
+  if (!saved || !Array.isArray(saved.cats)) return;
+  const seeded = new Set(saved.seeded || []);
+  let changed = false;
+  for (const id of NEW_DEFAULT_CATS) {
+    if (seeded.has(id)) continue;
+    seeded.add(id); changed = true;
+    const def = DEFAULT_CATS.find((c) => c.id === id);
+    if (def && !saved.cats.some((c) => c.id === id || c.name === def.name)) {
+      const at = saved.cats.findIndex((c) => c.name === FALLBACK);
+      saved.cats.splice(at < 0 ? saved.cats.length : at, 0, { ...def, keys: def.keys.slice() });
+    }
+  }
+  if (changed) await saveSettings({ ...saved, seeded: [...seeded] });
+}
+
 /* ---------- 정기 결제 ---------- */
 const pad2 = (n) => String(n).padStart(2, "0");
 const ymOf = (d) => `${d.getFullYear()}-${pad2(d.getMonth() + 1)}`;
@@ -96,45 +116,22 @@ async function materializeRecurring() {
 }
 
 /* ---------- Gemini ---------- */
-async function askModel(key, model, s, text, memo, methods) {
-  const names = catNames(s);
-  const prompt = [
-    "너는 한국어 가계부 입력을 이해하는 도우미다.",
-    `오늘 날짜: ${new Date().toISOString().slice(0, 10)}`,
-    `사용자가 쓴 한 줄: "${text}"`,
-    `금액·날짜·결제수단을 뺀 나머지: "${memo}"`,
-    `사용자의 결제수단: ${methods.join(", ") || "(없음)"}`,
-    "",
-    "할 일:",
-    "1. merchant: 상호명이나 지출 대상을 찾아 널리 쓰이는 정식 이름으로 바꿔라. 줄임말·오타·영문 표기·지점명을 바로잡아라 (예: 스벅→스타벅스, 맥날→맥도날드, 다이소 강남점→다이소). 확실히 아는 상호가 아니면 사용자가 쓴 그대로 두고, 이름을 지어내거나 덧붙이지 마라. 상호가 없으면 품목이나 용도를 짧게 적어라 (예: 점심, 택시).",
-    "2. category: 아래 분류 중 정확히 하나. 괄호는 그 분류에 속하는 예시. 월급·환급·용돈처럼 돈이 들어온 경우만 수입. 어디에도 안 맞으면 " + FALLBACK + ".",
-    ...s.cats.map((c) => `   - ${c.name}${c.keys.length ? ` (${c.keys.slice(0, 8).join(", ")})` : ""}`),
-    `   - ${INCOME}`,
-    "3. kind: 그 가게나 항목의 업종을 2~6자로 (예: 커피전문점, 편의점, 택시).",
-    "4. confident: 상호를 확실히 안다면 true, 추측이면 false.",
-    "5. payment: 카드사·간편결제·현금 같은 결제수단이 적혀 있으면 그 이름 (예: 현대카드, 토스페이), 없으면 빈 문자열. merchant에는 결제수단·금액·날짜를 절대 넣지 마라.",
-  ].join("\n");
+// 한 모델에 한 번 요청. parts는 텍스트·이미지 조각, schema는 받고 싶은 JSON 모양
+async function geminiOnce(key, model, parts, schema, timeoutMs) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": key },
     body: JSON.stringify({
-      contents: [{ role: "user", parts: [{ text: prompt }] }],
+      contents: [{ role: "user", parts }],
       generationConfig: {
         temperature: 0,
-        // 상호명 분류에 깊은 생각은 필요 없다: 3.x Flash 계열은 생각을 최소로 해서 빠르게
+        // 깊은 생각은 필요 없다: 3.x Flash 계열은 생각을 최소로 해서 빠르게
         ...(/^gemini-3\.\d+-flash/.test(model) ? { thinkingConfig: { thinkingLevel: "minimal" } } : {}),
         responseMimeType: "application/json",
-        responseSchema: {
-          type: "OBJECT",
-          properties: {
-            merchant: { type: "STRING" }, category: { type: "STRING", enum: names }, kind: { type: "STRING" },
-            confident: { type: "BOOLEAN" }, payment: { type: "STRING" },
-          },
-          required: ["merchant", "category", "kind", "confident", "payment"],
-        },
+        responseSchema: schema,
       },
     }),
-    signal: AbortSignal.timeout(12000),
+    signal: AbortSignal.timeout(timeoutMs),
   }).catch((e) => { e.retryable = true; throw e; });
   if (!res.ok) {
     const err = new Error(`Gemini ${model} ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -146,12 +143,12 @@ async function askModel(key, model, s, text, memo, methods) {
   return JSON.parse(data?.candidates?.[0]?.content?.parts?.map((p) => p.text || "").join("") || "{}");
 }
 
-async function askGemini(key, s, text, memo, methods) {
+// 앞 모델이 붐비거나 한도에 걸리면 다음 모델로. 503(일시적 혼잡)은 같은 모델로 한 번 더
+async function gemini(key, parts, schema, timeoutMs = 12000) {
   let lastErr;
   for (const model of GEMINI_MODELS) {
-    // 503(일시적 혼잡)은 같은 모델로 한 번 더 기다렸다가 시도
     for (let attempt = 0; attempt < 2; attempt++) {
-      try { return await askModel(key, model, s, text, memo, methods); }
+      try { return await geminiOnce(key, model, parts, schema, timeoutMs); }
       catch (e) {
         lastErr = e;
         if (!e.retryable) throw e;
@@ -161,6 +158,62 @@ async function askGemini(key, s, text, memo, methods) {
     }
   }
   throw lastErr;
+}
+
+const catLines = (s) => [
+  ...s.cats.map((c) => `   - ${c.name}${c.keys.length ? ` (${c.keys.slice(0, 8).join(", ")})` : ""}`),
+  `   - ${INCOME}`,
+];
+
+function askGemini(key, s, text, memo, methods) {
+  const prompt = [
+    "너는 한국어 가계부 입력을 이해하는 도우미다.",
+    `오늘 날짜: ${new Date().toISOString().slice(0, 10)}`,
+    `사용자가 쓴 한 줄: "${text}"`,
+    `금액·날짜·결제수단을 뺀 나머지: "${memo}"`,
+    `사용자의 결제수단: ${methods.join(", ") || "(없음)"}`,
+    "",
+    "할 일:",
+    "1. merchant: 상호명이나 지출 대상을 찾아 널리 쓰이는 정식 이름으로 바꿔라. 줄임말·오타·영문 표기·지점명을 바로잡아라 (예: 스벅→스타벅스, 맥날→맥도날드, 다이소 강남점→다이소). 확실히 아는 상호가 아니면 사용자가 쓴 그대로 두고, 이름을 지어내거나 덧붙이지 마라. 상호가 없으면 품목이나 용도를 짧게 적어라 (예: 점심, 택시).",
+    "2. category: 아래 분류 중 정확히 하나. 괄호는 그 분류에 속하는 예시. 월급·환급·용돈처럼 돈이 들어온 경우만 수입. 어디에도 안 맞으면 " + FALLBACK + ".",
+    ...catLines(s),
+    "3. kind: 그 가게나 항목의 업종을 2~6자로 (예: 커피전문점, 편의점, 택시).",
+    "4. confident: 상호를 확실히 안다면 true, 추측이면 false.",
+    "5. payment: 카드사·간편결제·현금 같은 결제수단이 적혀 있으면 그 이름 (예: 현대카드, 토스페이), 없으면 빈 문자열. merchant에는 결제수단·금액·날짜를 절대 넣지 마라.",
+  ].join("\n");
+  return gemini(key, [{ text: prompt }], {
+    type: "OBJECT",
+    properties: {
+      merchant: { type: "STRING" }, category: { type: "STRING", enum: catNames(s) }, kind: { type: "STRING" },
+      confident: { type: "BOOLEAN" }, payment: { type: "STRING" },
+    },
+    required: ["merchant", "category", "kind", "confident", "payment"],
+  });
+}
+
+// 영수증 사진 읽기: 상호, 최종 결제 금액, 날짜, 결제수단
+export async function readReceipt(key, s, { data, mime }) {
+  const prompt = [
+    "이 사진은 한국 영수증(카드 전표, 배달 앱 영수증 화면 포함)이다. 가계부에 한 줄로 기록할 정보를 뽑아라.",
+    `오늘 날짜: ${new Date().toISOString().slice(0, 10)}`,
+    `사용자의 결제수단: ${s.methods.map((m) => m.name).join(", ") || "(없음)"}`,
+    "",
+    "1. merchant: 가게의 정식 상호. 지점명·법인 표기(주식회사, (주))·사업자 정보는 빼라 (예: 스타벅스 강남R점 → 스타벅스).",
+    "2. total: 실제로 결제한 최종 금액(합계, 받을금액, 결제금액, 승인금액). 할인 뒤 금액이고 원 단위 숫자만. 부가세·공급가액·개별 품목 금액이 아니다.",
+    "3. date: 결제 날짜 YYYY-MM-DD. 연도가 없으면 오늘 기준 가장 최근 날짜. 안 보이면 빈 문자열.",
+    "4. payment: 영수증에 찍힌 카드사·결제수단 이름 그대로 (예: 현대카드, 신한카드, 카카오페이, 현금). \"카드\"처럼 뭉뚱그리지 마라. 안 보이면 빈 문자열.",
+    "5. category: 아래 분류 중 정확히 하나.",
+    ...catLines(s),
+    "6. readable: 영수증으로 읽을 수 있으면 true, 영수증이 아니거나 금액을 못 읽으면 false.",
+  ].join("\n");
+  return gemini(key, [{ text: prompt }, { inline_data: { mime_type: mime || "image/jpeg", data } }], {
+    type: "OBJECT",
+    properties: {
+      merchant: { type: "STRING" }, total: { type: "NUMBER" }, date: { type: "STRING" }, payment: { type: "STRING" },
+      category: { type: "STRING", enum: catNames(s) }, readable: { type: "BOOLEAN" },
+    },
+    required: ["merchant", "total", "date", "payment", "category", "readable"],
+  }, 30000);
 }
 
 async function understand({ text = "", memo = "", methods = [] }) {
@@ -225,6 +278,7 @@ export async function localApi(method, path, body = {}) {
   const s = await settings();
 
   if (name === "state" && method === "GET") {
+    await addNewDefaultCats();
     await materializeRecurring();
     const items = (await getAll("items")).sort((a, b) => b.d.localeCompare(a.d) || b.ts - a.ts);
     return { items, settings: await settings(), ai: !!(await geminiKey()) };
@@ -256,6 +310,18 @@ export async function localApi(method, path, body = {}) {
     return { ok: true };
   }
 
+  if (name === "receipt" && method === "POST") {
+    const key = await geminiKey();
+    if (!key) return { error: "설정에서 Gemini 키를 넣으면 영수증을 읽을 수 있어요." };
+    try {
+      const r = await readReceipt(key, s, body);
+      if (!r.readable || !(r.total > 0)) return { error: "영수증 금액을 읽지 못했어요. 영수증 전체가 보이게 다시 찍어 주세요." };
+      return { merchant: r.merchant, total: Math.round(r.total), date: /^\d{4}-\d{2}-\d{2}$/.test(r.date) ? r.date : "", payment: r.payment || "", category: r.category };
+    } catch (e) {
+      console.warn("[receipt]", e.message);
+      return { error: e.status === 429 ? "Gemini 사용 한도에 걸렸어요. 잠시 뒤 다시 찍어 주세요." : "영수증을 읽지 못했어요. 잠시 뒤 다시 시도해 주세요." };
+    }
+  }
   if (name === "understand" && method === "POST") {
     try { return await understand(body); }
     catch (e) { console.warn("[understand]", e.message); return { source: "error", error: e.message }; }
