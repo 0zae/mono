@@ -236,6 +236,49 @@ function countTo(target){
   animId = requestAnimationFrame(step);
 }
 
+/* ---------- 시작 애니메이션 ---------- */
+let appReady = false;
+function runSplash(){
+  const sp = $("splash"), svg = $("splashSvg"), logoImg = document.querySelector(".logo img");
+  const finish = ()=>{ document.documentElement.classList.add("splash-done"); q.focus(); };
+  if(!sp) return finish();
+  const set = (id, k, v)=>$(id).setAttribute(k, v);
+  const ease = t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2, out = t=>1-Math.pow(1-t,3), clamp = t=>Math.min(1,Math.max(0,t));
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const t0 = performance.now();
+  let shrinkAt = null;
+  const frame = now=>{
+    const t = now - t0;
+    // 1) o가 구멍에서 그대로 미끄러져 나오며 mono가 된다 (0.15~0.9초)
+    const p = reduce ? 1 : ease(clamp((t-150)/750));
+    set("spM","transform",`translate(${118.44*(1-p)} 0)`); set("spN","transform",`translate(${-6.93*(1-p)} 0)`);
+    set("spO1","cx",245.03+6.93*p); set("spO2","cx",370.96+132.86*p);
+    const moving = t >= 150 || reduce;
+    set("spH1","opacity",moving?0:1); set("spH2","opacity",moving?0:1);
+    // 겹친 곳 빼기: 움직이는 동안만 켠다 (멈춰 있을 땐 구멍을 꽉 채운 모양 그대로)
+    if(moving && !$("spGlyphs").hasAttribute("mask")){ set("spGlyphs","mask","url(#spMaskG)"); set("spOs","mask","url(#spMaskO)"); }
+    set("spMO1","cx",245.03+6.93*p); set("spMO2","cx",370.96+132.86*p);
+    set("spMM","transform",`translate(${118.44*(1-p)} 0)`); set("spMN","transform",`translate(${-6.93*(1-p)} 0)`);
+    // 2) n 아래 홈이 위에서 아래로 열린다 (0.9~1.25초)
+    set("spSlotRect","y", 170 + 32*(reduce ? 1 : out(clamp((t-900)/350))));
+    // 3) 기록을 다 불러왔고 최소 1.5초가 지나면(늦어도 3초) 왼쪽 위 로고 자리로 줄어든다
+    if(shrinkAt===null && ((appReady && logoImg.getBoundingClientRect().width>0 && t>=1500) || t>=3000)) shrinkAt = t;
+    if(shrinkAt!==null){
+      const dur = reduce ? 200 : 600, q = out(clamp((t-shrinkAt)/dur));
+      const ph = sp.getBoundingClientRect(), lg = logoImg.getBoundingClientRect();
+      const w0 = Math.min(230, innerWidth*.62), h0 = w0*254.52/615.97;
+      const cx = ph.width/2 - w0/2, cy = ph.height/2 - h0/2, s = lg.width / w0;
+      const x = cx + (lg.left - cx)*q, y = cy + (lg.top - cy)*q, sc = 1 + (s-1)*q;
+      svg.style.transform = `translate(${x - ph.width/2}px, ${y - ph.height/2}px) scale(${sc})`;
+      const Lf = lg.left, Tf = lg.top, Rf = ph.width - lg.right, Bf = ph.height - lg.bottom;
+      if(reduce){ sp.style.opacity = String(1-q); } else sp.style.clipPath = `inset(${Tf*q}px ${Rf*q}px ${Bf*q}px ${Lf*q}px)`;
+      if(q >= 1) return finish();
+    }
+    requestAnimationFrame(frame);
+  };
+  requestAnimationFrame(frame);
+}
+
 /* ---------- 영수증 ---------- */
 // 사진을 줄여서(긴 변 1600px JPEG) Gemini에 보낸다
 async function shrinkImage(file){
@@ -326,8 +369,60 @@ $("open").onclick=()=>openSheet();
     el.addEventListener("pointercancel", end);
   }
 } $("close").onclick=closeSheet; $("scrim").onclick=closeSheet;
-$("gear").onclick=()=>{ view="settings"; renderSheet(); };
-$("back").onclick=()=>{ const fromFilter = view==="filter"; view="list"; filter=null; renderSheet(); if(fromFilter) $("scroll").scrollTop = listScroll; };
+// 화면 전환: 앞으로 가면 새 화면이 오른쪽에서 밀려 들어오고, 뒤로 가면 왼쪽에서 (iOS 방식)
+let sliding = false;
+function slide(dir, render){
+  const sc = $("scroll"), sheet = $("sheet"), bar = sheet.querySelector(".bar");
+  if(sliding || matchMedia("(prefers-reduced-motion: reduce)").matches){ render(); return; }
+  sliding = true;
+  const scrollY = sc.scrollTop;
+  // 지금 화면을 본뜬 그림자 화면을 얹고, 진짜 화면에는 새 내용을 그린다
+  const ghost = sc.cloneNode(true);
+  ghost.removeAttribute("id"); ghost.querySelectorAll("[id]").forEach(e=>e.removeAttribute("id"));
+  ghost.className = "scroll ghost";
+  ghost.style.top = sc.offsetTop+"px";
+  sheet.appendChild(ghost);
+  ghost.scrollTop = scrollY;
+  // 상단바 왼쪽 글자(설정 / ‹ 내역): 나가는 글자를 본떠 두고 밀면서 사라지게
+  const leftOld = [$("gear"), $("back")].find(b=>!b.hidden);
+  const rOld = leftOld.getBoundingClientRect(), rBar = bar.getBoundingClientRect();
+  const oldLabel = leftOld.cloneNode(true);
+  oldLabel.removeAttribute("id"); oldLabel.hidden = false;
+  oldLabel.style.cssText = `position:absolute;left:${rOld.left-rBar.left}px;top:${rOld.top-rBar.top}px;margin:0;pointer-events:none`;
+  bar.appendChild(oldLabel);
+  render();
+  const leftNew = [$("gear"), $("back")].find(b=>!b.hidden);
+  // 위로 덮는 화면에 불투명 바탕과 왼쪽 그림자 (앞으로: 새 화면이 위, 뒤로: 나가는 화면이 위)
+  const top = dir>0 ? sc : ghost, under = dir>0 ? ghost : sc;
+  sc.style.position = "relative";
+  top.style.zIndex = "2"; under.style.zIndex = "1";
+  top.style.background = "var(--sheet-solid)"; top.style.boxShadow = "-10px 0 30px rgba(0,0,0,.08)";
+  top.style.clipPath = "inset(0 0 0 -40px)"; // 그림자는 왼쪽 가장자리에만
+  // 위쪽 가장자리를 부드럽게 흐려서 상단바와 경계선이 생기지 않게
+  top.style.webkitMaskImage = top.style.maskImage = "linear-gradient(to bottom, transparent 0, #000 10px)";
+  const ease = "transform .42s cubic-bezier(.32,.72,0,1), opacity .42s";
+  const shift = 22;
+  sc.style.transition = "none"; sc.style.transform = `translateX(${dir>0 ? 100 : -22}%)`;
+  ghost.style.transition = "none"; ghost.style.transform = "translateX(0)";
+  leftNew.style.transition = "none"; leftNew.style.transform = `translateX(${dir*shift}px)`; leftNew.style.opacity = "0";
+  sc.offsetWidth; // 시작 위치를 먼저 그리게
+  for(const el of [sc, ghost, leftNew]) el.style.transition = ease;
+  oldLabel.style.transition = "transform .3s cubic-bezier(.32,.72,0,1), opacity .16s"; // 나가는 글자는 빨리 사라지게
+  leftNew.style.transition = "transform .42s cubic-bezier(.32,.72,0,1), opacity .26s .1s"; // 들어오는 글자는 살짝 늦게
+  sc.style.transform = "translateX(0)";
+  ghost.style.transform = `translateX(${dir>0 ? -22 : 100}%)`; ghost.style.opacity = dir>0 ? ".6" : "1";
+  leftNew.style.transform = "translateX(0)"; leftNew.style.opacity = "1";
+  oldLabel.style.transform = `translateX(${-dir*shift}px)`; oldLabel.style.opacity = "0";
+  const done = ()=>{
+    ghost.remove(); oldLabel.remove();
+    for(const k of ["transition","transform","position","zIndex","background","boxShadow","clipPath","maskImage","webkitMaskImage"]) sc.style[k] = "";
+    for(const k of ["transition","transform","opacity"]) leftNew.style[k] = "";
+    sliding = false;
+  };
+  setTimeout(done, 440);
+}
+$("gear").onclick=()=>slide(1, ()=>{ view="settings"; renderSheet(); });
+$("back").onclick=()=>slide(-1, ()=>{ const fromFilter = view==="filter"; view="list"; filter=null; renderSheet(); if(fromFilter) $("scroll").scrollTop = listScroll; });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(asOpen()) closeAS(); else if(sheetOpen) closeSheet(); } });
 
 function sumBy(list, key){
@@ -548,7 +643,7 @@ $("as").addEventListener("focusin", e=>{ setTimeout(()=>e.target.scrollIntoView(
 $("scroll").addEventListener("click", e=>{
   const t=e.target.closest("[data-id]"); if(t) return openTx(t.dataset.id);
   const fc=e.target.closest("[data-fc]"), fp=e.target.closest("[data-fp]");
-  if(fc||fp){ listScroll = $("scroll").scrollTop; filter = fc ? {kind:"c", value:fc.dataset.fc} : {kind:"p", value:fp.dataset.fp}; view="filter"; return renderSheet(); }
+  if(fc||fp){ listScroll = $("scroll").scrollTop; filter = fc ? {kind:"c", value:fc.dataset.fc} : {kind:"p", value:fp.dataset.fp}; return slide(1, ()=>{ view="filter"; renderSheet(); }); }
   const m=e.target.closest("[data-m]"); if(m) return openMethod(m.dataset.m);
   const c=e.target.closest("[data-cat]"); if(c) return openCat(c.dataset.cat);
   const r=e.target.closest("[data-rec]"); if(r) return openRec(r.dataset.rec);
@@ -706,8 +801,8 @@ setHomeH();
   document.body.appendChild(probe); document.documentElement.style.setProperty("--sab", probe.offsetHeight+"px"); probe.remove(); }
 window.addEventListener("resize", ()=>{ if(window.innerHeight > homeH){ homeH = window.innerHeight; setHomeH(); } });
 window.addEventListener("orientationchange", ()=>setTimeout(()=>{ homeH = window.innerHeight; setHomeH(); }, 400));
-boot();
-q.focus();
+boot().then(()=>{ appReady = true; });
+runSplash();
 
 // 키보드가 올라와도 로고는 화면 맨 위에: iOS가 화면을 밀어 올린 만큼(visualViewport.offsetTop) 되돌린다
 const logo = document.querySelector(".logo");

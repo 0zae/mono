@@ -21,7 +21,7 @@
   --bg:#F2F2F7; --cell:#FFFFFF; --fill:rgba(118,118,128,.12); --sep:rgba(60,60,67,.18);
   --label:#000000; --label2:rgba(60,60,67,.6); --label3:rgba(60,60,67,.3);
   --accent:#FF5A2E; --red:#E0245E; --green:#34C759; --orange:#FF9500;
-  --dim:rgba(30,30,34,.1); --glass:rgba(255,255,255,.9); --pop:rgba(255,255,255,.96); --chev:rgba(60,60,67,.45); --chev-line:rgba(60,60,67,.3); --card-edge:rgba(0,0,0,.07); --glass-edge:rgba(255,255,255,.6);
+  --dim:rgba(30,30,34,.1); --glass:rgba(255,255,255,.9); --sheet-solid:#FCFCFC; --pop:rgba(255,255,255,.96); --chev:rgba(60,60,67,.45); --chev-line:rgba(60,60,67,.3); --card-edge:rgba(0,0,0,.07); --glass-edge:rgba(255,255,255,.6);
   --k-lemon:#F7CF1F; --k-amber:#FFA41B; --k-cherry:#E8243F; --k-rose:#FF4FA8; --k-violet:#B43CF0; --k-iris:#6E4BFF;
   --k-royal:#2F6BFF; --k-sky:#1FB5F2; --k-aqua:#14C7B4; --k-emerald:#2DD177; --k-lime:#9AE02B; --k-teal:#30B0C7;
 }
@@ -31,7 +31,7 @@
     --home:#000000;
     --bg:#000000; --cell:#1C1C1E; --fill:rgba(118,118,128,.24); --sep:rgba(84,84,88,.6);
     --label:#FFFFFF; --label2:rgba(235,235,245,.6); --label3:rgba(235,235,245,.3);
-    --accent:#FF5A2E; --red:#FF4F7B; --green:#30D158; --orange:#FF9F0A; --dim:rgba(0,0,0,.45); --glass:rgba(30,30,32,.7); --pop:rgba(44,44,46,.92); --chev:rgba(235,235,245,.5); --chev-line:rgba(235,235,245,.3); --card-edge:rgba(255,255,255,.04); --glass-edge:rgba(255,255,255,.08);
+    --accent:#FF5A2E; --red:#FF4F7B; --green:#30D158; --orange:#FF9F0A; --dim:rgba(0,0,0,.45); --glass:rgba(30,30,32,.7); --sheet-solid:#18181A; --pop:rgba(44,44,46,.92); --chev:rgba(235,235,245,.5); --chev-line:rgba(235,235,245,.3); --card-edge:rgba(255,255,255,.04); --glass-edge:rgba(255,255,255,.08);
     --k-lemon:#F7CF1F; --k-amber:#FFA41B; --k-cherry:#E8243F; --k-rose:#FF4FA8; --k-violet:#B43CF0; --k-iris:#6E4BFF;
     --k-royal:#2F6BFF; --k-sky:#1FB5F2; --k-aqua:#14C7B4; --k-emerald:#2DD177; --k-lime:#9AE02B; --k-teal:#40C8E0;
   }
@@ -41,7 +41,7 @@
   --home:#000000;
   --bg:#000000; --cell:#1C1C1E; --fill:rgba(118,118,128,.24); --sep:rgba(84,84,88,.6);
   --label:#FFFFFF; --label2:rgba(235,235,245,.6); --label3:rgba(235,235,245,.3);
-  --accent:#FF5A2E; --red:#FF4F7B; --green:#30D158; --orange:#FF9F0A; --dim:rgba(0,0,0,.45); --glass:rgba(30,30,32,.7); --pop:rgba(44,44,46,.92); --chev:rgba(235,235,245,.5); --chev-line:rgba(235,235,245,.3); --card-edge:rgba(255,255,255,.04); --glass-edge:rgba(255,255,255,.08);
+  --accent:#FF5A2E; --red:#FF4F7B; --green:#30D158; --orange:#FF9F0A; --dim:rgba(0,0,0,.45); --glass:rgba(30,30,32,.7); --sheet-solid:#18181A; --pop:rgba(44,44,46,.92); --chev:rgba(235,235,245,.5); --chev-line:rgba(235,235,245,.3); --card-edge:rgba(255,255,255,.04); --glass-edge:rgba(255,255,255,.08);
   --k-lemon:#F7CF1F; --k-amber:#FFA41B; --k-cherry:#E8243F; --k-rose:#FF4FA8; --k-violet:#B43CF0; --k-iris:#6E4BFF;
   --k-royal:#2F6BFF; --k-sky:#1FB5F2; --k-aqua:#14C7B4; --k-emerald:#2DD177; --k-lime:#9AE02B; --k-teal:#40C8E0;
 }
@@ -85,6 +85,11 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .done{color:var(--label2)}
 .done b{color:var(--label);font-weight:600}
 
+/* 시작 화면 */
+.splash{position:fixed;inset:0;background:#FF5A2E;z-index:20}
+.splash svg{position:absolute;left:50%;top:50%;width:min(230px,62vw);transform:translate(-50%,-50%);transform-origin:0 0;overflow:visible}
+.splash-done .splash{display:none}
+html:not(.splash-done) .logo img{opacity:0}
 .logo{max-width:560px;width:100%;margin:0 auto;padding-top:14px;display:flex;will-change:transform}
 .logo img{display:block;height:29px;width:auto}
 .foot{position:fixed;left:0;right:0;bottom:var(--kb,0px);padding-bottom:calc(20px + var(--sab,env(safe-area-inset-bottom,0px)));display:flex;justify-content:center;background:var(--home);transition:bottom .25s ease}
@@ -98,7 +103,10 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .scrim.on{opacity:1;pointer-events:auto}
 .sheet{position:fixed;left:0;right:0;bottom:0;top:calc(env(safe-area-inset-top,0px) + 14px + 29px + 14px);background:var(--glass);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);box-shadow:inset 0 .5px 0 var(--glass-edge),0 -8px 30px rgba(0,0,0,.08);border-radius:14px 14px 0 0;transform:translateY(105%);transition:transform .42s cubic-bezier(.32,.72,0,1);will-change:transform;display:flex;flex-direction:column;max-width:640px;margin:0 auto}
 .sheet.on{transform:none}
-.bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 4px;flex:none;touch-action:none}
+.sheet{overflow:hidden}
+.scroll.ghost{position:absolute;left:0;right:0;bottom:0;overflow:hidden;pointer-events:none;background:transparent}
+.grab{z-index:4}
+.bar{display:flex;align-items:center;justify-content:space-between;padding:12px 16px 4px;flex:none;touch-action:none;position:relative;z-index:3}
 .grab{position:absolute;top:0;left:50%;width:120px;height:22px;transform:translateX(-50%);touch-action:none;cursor:grab;z-index:1}
 .grab::after{content:"";position:absolute;top:6px;left:50%;width:36px;height:5px;border-radius:3px;background:var(--label3);transform:translateX(-50%)}
 .bar button{border:0;background:none;color:var(--accent);font-size:17px;padding:6px 0}
@@ -110,7 +118,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .mnav button:active{opacity:.6}
 .mnav button:disabled{color:var(--label3);cursor:default}
 .mnav svg{display:block}
-.bar .back{display:flex;align-items:center;gap:4px}
+.bar .back{display:flex;align-items:center;gap:7px}
 .scroll{overflow-y:auto;flex:1;padding:0 16px calc(32px + var(--kb,0px) + env(safe-area-inset-bottom,0px));-webkit-overflow-scrolling:touch}
 h1{font-size:34px;line-height:41px;font-weight:700;letter-spacing:.01em;margin:4px 0 14px}
 .sum{display:flex;flex-direction:column;gap:2px;margin-bottom:22px}
@@ -130,6 +138,8 @@ button.cell:active{background:var(--fill)}
 @media (min-resolution:3dppx){.cell + .cell::before{transform:scaleY(.3334)}}
 .group:has(.cdot) .cell + .cell::before{left:38px}
 .group:has(.ptile) .cell + .cell::before,.group:has(.ico) .cell + .cell::before{left:58px}
+/* 항목이 아닌 "○○ 추가" 줄 위의 선은 카드 끝까지 */
+.group .cell + .cell[data-m="__new"]::before,.group .cell + .cell[data-rec="__new"]::before,.group .cell + .cell[data-cat="__new"]::before{left:0}
 .ptile{width:30px;height:30px;border-radius:8px;background:var(--fill);color:var(--label2);display:grid;place-items:center;flex:none}
 .ptile.def{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
 .pi{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
@@ -201,6 +211,31 @@ h2.sec{font-size:22px;line-height:28px;font-weight:700;letter-spacing:.01em;marg
 </style>
 </head>
 <body>
+<!-- 시작 화면: 주황 바탕의 mn → o가 빠져나와 mono → 왼쪽 위 로고로 줄어들며 앱 시작 (첫 화면부터 보이도록 HTML에 바로) -->
+<div class="splash" id="splash" aria-hidden="true">
+  <svg id="splashSvg" viewBox="0 0 615.97 254.52">
+    <defs>
+      <clipPath id="spSlotClip"><rect id="spSlotRect" x="360" y="170" width="40" height="40"/></clipPath>
+      <!-- 겹친 곳 빼기(복합 패스처럼): 글자에서는 o가 지나는 자리를, o에서는 글자 몸통 자리를 뺀다 -->
+      <mask id="spMaskG" maskUnits="userSpaceOnUse" x="-300" y="-100" width="1300" height="500">
+        <rect x="-300" y="-100" width="1300" height="500" fill="#fff"/>
+        <circle id="spMO1" cx="245.03" cy="137.51" r="41.01" fill="#000"/><circle id="spMO2" cx="370.96" cy="137.51" r="41.01" fill="#000"/>
+      </mask>
+      <mask id="spMaskO" maskUnits="userSpaceOnUse" x="-300" y="-100" width="1300" height="500">
+        <rect x="-300" y="-100" width="1300" height="500" fill="#fff"/>
+        <path id="spMM" transform="translate(118.44 0)" fill="#000" d="M182.05,93.59c-.01-22.64-18.37-40.99-41.01-40.99v41.06-.02s0-.05,0-.05c-.01-22.64-18.37-40.99-41.01-40.99h-28.88v149.31h110.91v-108.27s0-.05,0-.05ZM126.59,178.53c-22.65,0-41.01-18.36-41.01-41.01s18.36-41.01,41.01-41.01,41.01,18.36,41.01,41.01-18.36,41.01-41.01,41.01Z"/><path id="spMN" transform="translate(-6.93 0)" fill="#000" d="M377.89,52.6h-55.46v149.31h47.95v-24.09c-19.06-3.53-33.5-20.23-33.5-40.32,0-22.65,18.36-41.01,41.01-41.01s41.01,18.36,41.01,41.01c0,20.09-14.44,36.79-33.5,40.32v24.09h47.95v-93.86c0-30.63-24.83-55.46-55.46-55.46Z"/>
+      </mask>
+    </defs>
+    <g fill="#fff">
+      <g id="spGlyphs">
+        <g id="spM" transform="translate(118.44 0)"><path d="M182.05,93.59c-.01-22.64-18.37-40.99-41.01-40.99v41.06-.02s0-.05,0-.05c-.01-22.64-18.37-40.99-41.01-40.99h-28.88v149.31h110.91v-108.27s0-.05,0-.05ZM126.59,178.53c-22.65,0-41.01-18.36-41.01-41.01s18.36-41.01,41.01-41.01,41.01,18.36,41.01,41.01-18.36,41.01-41.01,41.01Z"/><circle id="spH1" cx="126.59" cy="137.52" r="41.6"/></g>
+        <g id="spN" transform="translate(-6.93 0)"><path d="M377.89,52.6h-55.46v149.31h47.95v-24.09c-19.06-3.53-33.5-20.23-33.5-40.32,0-22.65,18.36-41.01,41.01-41.01s41.01,18.36,41.01,41.01c0,20.09-14.44,36.79-33.5,40.32v24.09h47.95v-93.86c0-30.63-24.83-55.46-55.46-55.46Z"/><circle id="spH2" cx="377.89" cy="137.51" r="41.6"/>
+          <path clip-path="url(#spSlotClip)" stroke="#fff" stroke-width=".8" d="M370.38,201.91V177.82A41.01,41.01,0,0,0,385.4,177.82V201.91Z"/></g>
+      </g>
+      <g id="spOs"><circle id="spO1" cx="245.03" cy="137.51" r="41.01"/><circle id="spO2" cx="370.96" cy="137.51" r="41.01"/></g>
+    </g>
+  </svg>
+</div>
 <main class="home">
   <header class="logo"><img src="./logo.svg" alt="Mono"></header>
   <div class="center">
@@ -222,7 +257,7 @@ h2.sec{font-size:22px;line-height:28px;font-weight:700;letter-spacing:.01em;marg
   <div class="grab"></div>
   <div class="bar">
     <button id="gear">설정</button>
-    <button id="back" class="back" hidden><svg width="12" height="20" viewBox="0 0 12 20" aria-hidden="true"><path d="M10 2 2 10l8 8" fill="none" stroke="currentColor" stroke-width="2.6" stroke-linecap="round" stroke-linejoin="round"/></svg>내역</button>
+    <button id="back" class="back" hidden><svg width="11" height="18" viewBox="0 0 11 18" aria-hidden="true"><path d="M9 1.8 2 9l7 7.2" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>내역</button>
     <button class="b" id="close">완료</button>
   </div>
   <div class="scroll" id="scroll"></div>
