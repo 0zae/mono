@@ -20,10 +20,10 @@
   --home:#FFFFFF;
   --bg:#F2F2F7; --cell:#FFFFFF; --fill:rgba(118,118,128,.12); --sep:rgba(60,60,67,.18);
   --label:#000000; --label2:rgba(60,60,67,.6); --label3:rgba(60,60,67,.3);
-  --accent:#FF5A2E; --red:#C8102E; --green:#34C759; --orange:#FF9500;
-  --dim:rgba(30,30,34,.1); --glass:rgba(255,255,255,.9); --card-edge:rgba(0,0,0,.07); --glass-edge:rgba(255,255,255,.6);
-  --k-orange:#E8A23A; --k-brown:#3A3532; --k-cyan:#5E9ED2; --k-pink:#E0308C; --k-indigo:#1C3C8C; --k-purple:#9B1FE8; --k-green:#5F9F5A;
-  --k-red:#C8262E; --k-yellow:#E9CF2E; --k-mint:#4FCF8C; --k-blue:#2C5C9C; --k-gray:#8CA0C8; --k-teal:#30B0C7;
+  --accent:#FF5A2E; --red:#E0245E; --green:#34C759; --orange:#FF9500;
+  --dim:rgba(30,30,34,.1); --glass:rgba(255,255,255,.9); --pop:rgba(255,255,255,.96); --chev:rgba(60,60,67,.45); --card-edge:rgba(0,0,0,.07); --glass-edge:rgba(255,255,255,.6);
+  --k-lemon:#F7CF1F; --k-amber:#FFA41B; --k-cherry:#E8243F; --k-rose:#FF4FA8; --k-violet:#B43CF0; --k-iris:#6E4BFF;
+  --k-royal:#2F6BFF; --k-sky:#1FB5F2; --k-aqua:#14C7B4; --k-emerald:#2DD177; --k-lime:#9AE02B; --k-teal:#30B0C7;
 }
 @media (prefers-color-scheme: dark){
   :root:not([data-theme="light"]){
@@ -31,9 +31,9 @@
     --home:#000000;
     --bg:#000000; --cell:#1C1C1E; --fill:rgba(118,118,128,.24); --sep:rgba(84,84,88,.6);
     --label:#FFFFFF; --label2:rgba(235,235,245,.6); --label3:rgba(235,235,245,.3);
-    --accent:#FF5A2E; --red:#FF4D6D; --green:#30D158; --orange:#FF9F0A; --dim:rgba(0,0,0,.45); --glass:rgba(30,30,32,.7); --card-edge:rgba(255,255,255,.04); --glass-edge:rgba(255,255,255,.08);
-    --k-orange:#F0B04C; --k-brown:#A39A92; --k-cyan:#7DB4E4; --k-pink:#F2589F; --k-indigo:#5C7FE0; --k-purple:#B25AF7; --k-green:#7DBE77;
-    --k-red:#F0525A; --k-yellow:#F5E36A; --k-mint:#6EE3A4; --k-blue:#5A8CD6; --k-gray:#A9B8DA; --k-teal:#40C8E0;
+    --accent:#FF5A2E; --red:#FF4F7B; --green:#30D158; --orange:#FF9F0A; --dim:rgba(0,0,0,.45); --glass:rgba(30,30,32,.7); --pop:rgba(44,44,46,.92); --chev:rgba(235,235,245,.5); --card-edge:rgba(255,255,255,.04); --glass-edge:rgba(255,255,255,.08);
+    --k-lemon:#F7CF1F; --k-amber:#FFA41B; --k-cherry:#E8243F; --k-rose:#FF4FA8; --k-violet:#B43CF0; --k-iris:#6E4BFF;
+    --k-royal:#2F6BFF; --k-sky:#1FB5F2; --k-aqua:#14C7B4; --k-emerald:#2DD177; --k-lime:#9AE02B; --k-teal:#40C8E0;
   }
 }
 :root[data-theme="dark"]{
@@ -41,9 +41,9 @@
   --home:#000000;
   --bg:#000000; --cell:#1C1C1E; --fill:rgba(118,118,128,.24); --sep:rgba(84,84,88,.6);
   --label:#FFFFFF; --label2:rgba(235,235,245,.6); --label3:rgba(235,235,245,.3);
-  --accent:#FF5A2E; --red:#FF4D6D; --green:#30D158; --orange:#FF9F0A; --dim:rgba(0,0,0,.45); --glass:rgba(30,30,32,.7); --card-edge:rgba(255,255,255,.04); --glass-edge:rgba(255,255,255,.08);
-  --k-orange:#F0B04C; --k-brown:#A39A92; --k-cyan:#7DB4E4; --k-pink:#F2589F; --k-indigo:#5C7FE0; --k-purple:#B25AF7; --k-green:#7DBE77;
-  --k-red:#F0525A; --k-yellow:#F5E36A; --k-mint:#6EE3A4; --k-blue:#5A8CD6; --k-gray:#A9B8DA; --k-teal:#40C8E0;
+  --accent:#FF5A2E; --red:#FF4F7B; --green:#30D158; --orange:#FF9F0A; --dim:rgba(0,0,0,.45); --glass:rgba(30,30,32,.7); --pop:rgba(44,44,46,.92); --chev:rgba(235,235,245,.5); --card-edge:rgba(255,255,255,.04); --glass-edge:rgba(255,255,255,.08);
+  --k-lemon:#F7CF1F; --k-amber:#FFA41B; --k-cherry:#E8243F; --k-rose:#FF4FA8; --k-violet:#B43CF0; --k-iris:#6E4BFF;
+  --k-royal:#2F6BFF; --k-sky:#1FB5F2; --k-aqua:#14C7B4; --k-emerald:#2DD177; --k-lime:#9AE02B; --k-teal:#40C8E0;
 }
 *{box-sizing:border-box}
 
@@ -61,7 +61,7 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .home{position:fixed;top:0;left:0;right:0;height:var(--homeH,100%);padding-top:env(safe-area-inset-top,0px);display:flex;flex-direction:column;padding-inline:16px}
 .center{flex:1;display:flex;flex-direction:column;justify-content:center;width:100%;max-width:560px;margin:0 auto;padding-bottom:calc(var(--homeH,100vh) * .34)}
 .field{display:flex;align-items:center;gap:8px;background:var(--fill);border-radius:12px;height:48px;padding:0 12px}
-.field svg{flex:none;color:var(--label2)}
+.field > svg{flex:none;color:var(--label2)}
 .field input{flex:1;min-width:0;border:0;background:none;outline:none;font-size:17px;height:100%}
 .field input::placeholder{color:var(--label2)}
 .field .go{border:0;background:var(--accent);color:#fff;width:30px;height:30px;border-radius:50%;display:grid;place-items:center;flex:none;transition:opacity .15s,transform .15s}
@@ -123,13 +123,23 @@ h1{font-size:34px;font-weight:700;letter-spacing:.01em;margin:4px 0 14px}
 .sum .row b{color:var(--label);font-weight:600}
 .cap{font-size:13px;color:var(--label2);text-transform:none;padding:0 16px 7px;display:flex;justify-content:space-between}
 .group{background:var(--cell);border-radius:10px;overflow:hidden;margin-bottom:24px}
-.sheet .group{box-shadow:0 0 0 .5px var(--card-edge),0 1px 4px rgba(0,0,0,.04)}
+.sheet .group{box-shadow:0 0 0 .5px var(--card-edge)}
 .cell{display:flex;align-items:center;gap:12px;padding:0 16px;min-height:44px;width:100%;border:0;background:none;text-align:left;position:relative}
 button.cell:active{background:var(--fill)}
 .cell + .cell::before{content:"";position:absolute;top:0;right:0;left:16px;height:.5px;background:var(--sep)}
-.cell:has(> .ico)::before{left:58px}
+.cell:has(> .ico)::before,.cell:has(> .ptile)::before{left:58px}
+.ptile{width:30px;height:30px;border-radius:8px;background:var(--fill);color:var(--label2);display:grid;place-items:center;flex:none}
+.ptile.def{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+.pi{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
+.as .kinds{display:flex;gap:6px;padding:0 14px 12px}
+.as .kinds button{flex:1;min-width:0;height:40px;border:0;border-radius:10px;background:var(--fill);color:var(--label2);display:grid;place-items:center}
+.as .kinds button .pi{width:20px;height:20px}
+.as .kinds button.sel{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);box-shadow:inset 0 0 0 1.5px var(--accent)}
 .cell:has(> .cdot)::before{left:38px}
 .cdot{width:10px;height:10px;border-radius:50%;flex:none}
+.chv{flex:none;color:var(--chev);vertical-align:middle}
+.chv-bg{fill:var(--fill)}
+.r .chv{margin-left:2px}
 h2.sec{font-size:22px;font-weight:700;letter-spacing:.01em;margin:6px 0 12px}
 .ico{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;color:#fff;font-size:13px;font-weight:600;flex:none}
 .cell .t{flex:1;min-width:0;padding:11px 0;display:flex;flex-direction:column;gap:1px}
@@ -142,28 +152,40 @@ h2.sec{font-size:22px;font-weight:700;letter-spacing:.01em;margin:6px 0 12px}
 .edit{border:0;background:none;color:var(--accent);font-size:13px;padding:0}
 
 /* ---------- action sheet ---------- */
-.as{position:fixed;left:0;right:0;bottom:var(--kb,0px);max-height:calc(100% - var(--kb,0px) - env(safe-area-inset-top,0px) - 12px);overflow-y:auto;overscroll-behavior:contain;padding:0 8px calc(8px + env(safe-area-inset-bottom,0px));transform:translateY(110%);transition:transform .3s cubic-bezier(.32,.72,0,1);max-width:480px;margin:0 auto;display:flex;flex-direction:column;gap:8px;z-index:3}
-.as.on{transform:none}
-.as .g{background:var(--cell);border-radius:14px;overflow:hidden}
-.as .h{text-align:center;font-size:13px;color:var(--label2);padding:14px 16px}
-.as .chips{display:flex;flex-wrap:wrap;gap:8px;padding:0 14px 14px;justify-content:center}
-.as .chips button{border:0;background:var(--fill);border-radius:999px;padding:7px 12px;font-size:15px;display:flex;align-items:center;gap:6px}
+/* 가운데 작은 팝업 */
+.as{position:fixed;left:50%;top:calc((100% - var(--kb,0px)) / 2);width:min(340px,calc(100% - 40px));max-height:calc(100% - var(--kb,0px) - env(safe-area-inset-top,0px) - 40px);overflow-y:auto;overscroll-behavior:contain;
+  background:var(--pop);-webkit-backdrop-filter:blur(30px) saturate(180%);backdrop-filter:blur(30px) saturate(180%);border-radius:18px;box-shadow:0 0 0 .5px var(--card-edge),0 18px 50px rgba(0,0,0,.16);
+  transform:translate(-50%,-50%) scale(.94);opacity:0;pointer-events:none;transition:transform .22s cubic-bezier(.3,1.3,.5,1),opacity .18s,top .25s;z-index:3}
+.as.on{transform:translate(-50%,-50%) scale(1);opacity:1;pointer-events:auto}
+.as .g{background:none}
+.as .h{text-align:center;font-size:15px;font-weight:600;color:var(--label);padding:18px 18px 12px;line-height:1.35}
+.as .chips{display:flex;flex-wrap:wrap;gap:6px;padding:0 14px 12px;justify-content:center}
+.as .chips button{border:0;background:var(--fill);border-radius:999px;padding:6px 11px;font-size:14px;display:flex;align-items:center;gap:6px}
 .as .chips button.sel{background:var(--accent);color:#fff}
-.as .chips i{width:8px;height:8px;border-radius:50%}
-.as .btn{display:block;width:100%;border:0;border-top:.5px solid var(--sep);background:none;height:56px;font-size:20px;color:var(--accent)}
-.as .btn.red{color:var(--red)}
-.as .btn.b{font-weight:600}
-.as .g > .btn.b:first-child, .as .g:last-child .btn{border:0}
-.as .sub{font-size:13px;color:var(--label2);padding:0 16px 8px;text-align:center}
-.as .fields{display:flex;flex-direction:column;gap:8px;padding:0 14px 14px}
-.as .swatches{display:flex;flex-wrap:wrap;gap:10px;justify-content:center;padding:2px 14px 16px}
-.as .swatches button{width:30px;height:30px;border-radius:50%;border:0;padding:0;box-shadow:0 0 0 2px var(--cell)}
-.as .swatches button.sel{box-shadow:0 0 0 2px var(--cell),0 0 0 4px var(--label)}
-.as .fields textarea{border:0;background:var(--fill);border-radius:10px;padding:10px 12px;font:inherit;font-size:17px;outline:none;width:100%;min-height:76px;resize:vertical;color:inherit}
-.as .day-row{display:flex;align-items:center;gap:8px;font-size:17px;padding:0 4px}
-.as .fields .day-row input{width:72px;text-align:center}
-.as .hint-line{font-size:13px;color:var(--label2);text-align:center;padding:0 16px 12px;min-height:1px}
-.as .fields input{border:0;background:var(--fill);border-radius:10px;height:44px;padding:0 12px;font-size:17px;outline:none;width:100%}
+.as .chips i{width:7px;height:7px;border-radius:50%}
+.as .sub{font-size:12px;color:var(--label2);padding:2px 16px 6px;text-align:center}
+.as .fields{display:flex;flex-direction:column;gap:8px;padding:0 14px 12px}
+.as .swatches{display:grid;grid-template-columns:repeat(6,30px);gap:12px 14px;justify-content:center;padding:4px 14px 16px}
+.as .swatches button,.as .swatches label{width:30px;height:30px;border-radius:50%;border:0;padding:0;box-shadow:0 0 0 2px var(--pop);cursor:pointer;position:relative}
+.as .swatches .sel{box-shadow:0 0 0 2px var(--pop),0 0 0 3.5px var(--label)}
+.as .swatches label{background:conic-gradient(#f33,#ff3,#3f3,#3ff,#33f,#f3f,#f33)}
+.as .swatches label i{position:absolute;inset:7px;border-radius:50%;background:var(--pop)}
+.as .swatches label input{position:absolute;inset:0;opacity:0;width:100%;height:100%;cursor:pointer}
+.as .fields textarea{border:0;background:var(--fill);border-radius:10px;padding:10px 12px;font:inherit;font-size:16px;outline:none;width:100%;min-height:68px;resize:vertical;color:inherit}
+.as .day-row{display:flex;align-items:center;gap:8px;font-size:16px;padding:0 4px}
+.as .fields .day-row input{width:64px;text-align:center}
+.as .hint-line{font-size:12px;color:var(--label2);text-align:center;padding:0 16px 10px;min-height:1px}
+/* 부가 동작(기본 지정·삭제 등): 작은 글자 버튼 */
+.as .pop-extra{display:flex;justify-content:center;flex-wrap:wrap;gap:4px 18px;padding:0 16px 12px}
+.as .pop-extra button{border:0;background:none;padding:4px 0;font-size:14px;color:var(--label2)}
+.as .pop-extra button.red{color:var(--red)}
+/* 아래: 취소 | 저장 */
+.as .pop-foot{display:grid;grid-auto-flow:column;grid-auto-columns:1fr;border-top:.5px solid var(--sep)}
+.as .pop-foot button{border:0;background:none;height:48px;font-size:17px;color:var(--label2)}
+.as .pop-foot button + button{border-left:.5px solid var(--sep)}
+.as .pop-foot .primary{color:var(--accent);font-weight:600}
+.as .pop-foot .primary.red{color:var(--red)}
+.as .fields input{border:0;background:var(--fill);border-radius:10px;height:42px;padding:0 12px;font-size:16px;outline:none;width:100%}
 .bar .right{display:flex;gap:18px}
 .inline{border:0;background:none;outline:none;font-size:17px;width:100%;padding:0}
 .chev svg{transition:transform .2s}

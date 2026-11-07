@@ -2,25 +2,28 @@
 // 서버 없이 브라우저(IndexedDB)에 모든 기록을 두고, Gemini는 이 기기에서 직접 호출한다.
 // app.js는 예전 서버 API와 같은 모양(method, path, body)으로 localApi를 부른다.
 
-export const COLORS = ["orange","brown","cyan","pink","indigo","purple","green","red","yellow","mint","blue","gray"];
+export const COLORS = ["lemon","amber","cherry","rose","violet","iris","royal","sky","aqua","emerald","lime"];
+// 예전 색 이름 → 새 팔레트 (이미 쓰던 기기의 카테고리 색을 옮길 때)
+const OLD_COLORS = {"orange": "amber", "brown": "iris", "cyan": "sky", "pink": "rose", "indigo": "royal", "purple": "violet", "green": "emerald", "red": "cherry", "mint": "aqua", "gray": "lime", "yellow": "lemon", "blue": "royal"};
+const isHex = (c) => /^#[0-9a-f]{6}$/i.test(c || "");
 export const DEFAULT_CATS = [
-  {id:"food",name:"식비",color:"orange",keys:["점심","저녁","아침","밥","식당","김밥","치킨","피자","배달","배민","쿠팡이츠","요기요","맥도날드","버거","라면","분식","국밥","마트","장보기","이마트","홈플러스","편의점","gs25","cu","세븐일레븐","식사","도시락","떡볶이","초밥","고기","삼겹살","짜장","짬뽕","냉면","샐러드","야식"]},
-  {id:"cafe",name:"카페",color:"brown",keys:["커피","카페","스타벅스","스벅","라떼","아메리카노","디저트","빵","베이커리","케이크","투썸","메가커피","컴포즈","빽다방","이디야","블루보틀","바나프레소","음료"]},
-  {id:"move",name:"교통",color:"cyan",keys:["택시","버스","지하철","주유","기름","카카오t","기차","ktx","srt","주차","톨게이트","통행료","교통","따릉이","항공","비행기"]},
-  {id:"shop",name:"쇼핑",color:"pink",keys:["옷","신발","쿠팡","무신사","다이소","올리브영","쇼핑","가방","화장품","29cm","지그재그","이케아","전자","애플"]},
-  {id:"life",name:"생활",color:"indigo",keys:["관리비","전기","가스","수도","통신","핸드폰","휴대폰","인터넷","월세","세탁","생필품","보험","미용실","헤어"]},
-  {id:"fun",name:"문화",color:"purple",keys:["영화","cgv","메가박스","넷플릭스","유튜브","구독","공연","책","게임","스포티파이","멜론","전시","티빙","쿠팡플레이","여행","숙소","호텔"]},
-  {id:"med",name:"의료",color:"green",keys:["병원","약국","약","치과","한의원","안과","진료","피부과"]},
-  {id:"meet",name:"모임",color:"red",keys:["술","맥주","소주","회식","모임","선물","경조사","축의금","부조","생일"]},
-  {id:"night",name:"유흥",color:"mint",keys:["노래방","코인노래방","클럽","라운지","펍","포차","이자카야","호프","술집","와인바","칵테일","pc방","피시방","당구","볼링","오락실","방탈출"]},
-  {id:"etc",name:"기타",color:"gray",keys:[]}
+  {id:"food",name:"식비",color:"amber",keys:["점심","저녁","아침","밥","식당","김밥","치킨","피자","배달","배민","쿠팡이츠","요기요","맥도날드","버거","라면","분식","국밥","마트","장보기","이마트","홈플러스","편의점","gs25","cu","세븐일레븐","식사","도시락","떡볶이","초밥","고기","삼겹살","짜장","짬뽕","냉면","샐러드","야식"]},
+  {id:"cafe",name:"카페",color:"iris",keys:["커피","카페","스타벅스","스벅","라떼","아메리카노","디저트","빵","베이커리","케이크","투썸","메가커피","컴포즈","빽다방","이디야","블루보틀","바나프레소","음료"]},
+  {id:"move",name:"교통",color:"sky",keys:["택시","버스","지하철","주유","기름","카카오t","기차","ktx","srt","주차","톨게이트","통행료","교통","따릉이","항공","비행기"]},
+  {id:"shop",name:"쇼핑",color:"rose",keys:["옷","신발","쿠팡","무신사","다이소","올리브영","쇼핑","가방","화장품","29cm","지그재그","이케아","전자","애플"]},
+  {id:"life",name:"생활",color:"royal",keys:["관리비","전기","가스","수도","통신","핸드폰","휴대폰","인터넷","월세","세탁","생필품","보험","미용실","헤어"]},
+  {id:"fun",name:"문화",color:"violet",keys:["영화","cgv","메가박스","넷플릭스","유튜브","구독","공연","책","게임","스포티파이","멜론","전시","티빙","쿠팡플레이","여행","숙소","호텔"]},
+  {id:"med",name:"의료",color:"emerald",keys:["병원","약국","약","치과","한의원","안과","진료","피부과"]},
+  {id:"meet",name:"모임",color:"cherry",keys:["술","맥주","소주","회식","모임","선물","경조사","축의금","부조","생일"]},
+  {id:"night",name:"유흥",color:"aqua",keys:["노래방","코인노래방","클럽","라운지","펍","포차","이자카야","호프","술집","와인바","칵테일","pc방","피시방","당구","볼링","오락실","방탈출"]},
+  {id:"etc",name:"기타",color:"lime",keys:[]}
 ];
 const INCOME = "수입";
 const FALLBACK = "기타";
 const GEMINI_MODELS = ["gemini-3.5-flash", "gemini-3.5-flash-lite", "gemini-flash-lite-latest"];
 const DEFAULT_SETTINGS = {
   budget: 1500000,
-  methods: [{ id: "card", name: "카드", alias: ["체크", "신용"] }, { id: "cash", name: "현금", alias: [] }],
+  methods: [{ id: "card", name: "카드", alias: ["체크", "신용"], kind: "card" }, { id: "cash", name: "현금", alias: [], kind: "cash" }],
   def: "card",
   cats: DEFAULT_CATS,
   recurring: [],
@@ -72,6 +75,10 @@ const NEW_DEFAULT_CATS = ["night"];
 async function addNewDefaultCats() {
   const saved = await get("kv", "settings");
   if (!saved || !Array.isArray(saved.cats)) return;
+  if (saved.cats.some((c) => OLD_COLORS[c.color])) {
+    saved.cats = saved.cats.map((c) => (OLD_COLORS[c.color] ? { ...c, color: OLD_COLORS[c.color] } : c));
+    await saveSettings(saved);
+  }
   const seeded = new Set(saved.seeded || []);
   let changed = false;
   for (const id of NEW_DEFAULT_CATS) {
@@ -234,15 +241,16 @@ async function understand({ text = "", memo = "", methods = [] }) {
 function cleanSettings(s, b) {
   if (Number(b.budget) > 0) s.budget = Math.round(Number(b.budget));
   if (Array.isArray(b.methods)) s.methods = b.methods.filter((x) => x && x.id && x.name)
-    .map((x) => ({ id: String(x.id), name: String(x.name), alias: Array.isArray(x.alias) ? x.alias.map(String) : [] }));
+    .map((x) => ({ id: String(x.id), name: String(x.name), alias: Array.isArray(x.alias) ? x.alias.map(String) : [],
+      ...(["card", "cash", "pay", "bank", "point"].includes(x.kind) ? { kind: x.kind } : {}) }));
   if (typeof b.def === "string") s.def = b.def;
   if (Array.isArray(b.cats)) {
     const seen = new Set([INCOME]);
     const cats = b.cats.filter((c) => c && c.id && String(c.name || "").trim())
-      .map((c) => ({ id: String(c.id), name: String(c.name).trim().slice(0, 10), color: COLORS.includes(c.color) ? c.color : "gray",
+      .map((c) => ({ id: String(c.id), name: String(c.name).trim().slice(0, 10), color: COLORS.includes(c.color) || isHex(c.color) ? c.color : (OLD_COLORS[c.color] || "lime"),
         keys: Array.isArray(c.keys) ? c.keys.map((k) => String(k).trim()).filter(Boolean).slice(0, 200) : [] }))
       .filter((c) => !seen.has(c.name) && seen.add(c.name));
-    if (!cats.some((c) => c.name === FALLBACK)) cats.push({ id: "etc", name: FALLBACK, color: "gray", keys: [] });
+    if (!cats.some((c) => c.name === FALLBACK)) cats.push({ id: "etc", name: FALLBACK, color: "lime", keys: [] });
     s.cats = cats;
   }
   if (Array.isArray(b.recurring)) {

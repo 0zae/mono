@@ -2,6 +2,7 @@
 /* ---------- vocabulary ---------- */
 // 분류는 설정에서 바꿀 수 있다. 서버에서 받아 오기 전까지 쓰는 기본값.
 import { localApi, COLORS, DEFAULT_CATS } from "./local.js";
+const COLOR_NAMES = {"lemon": "레몬", "amber": "앰버", "cherry": "체리 레드", "rose": "핫핑크", "violet": "바이올렛", "iris": "인디고", "royal": "로열 블루", "sky": "스카이", "aqua": "터쿼이즈", "emerald": "에메랄드", "lime": "라임"};
 const IN_KEYS = ["월급","급여","보너스","상여","용돈","이자","환급","입금","수입","부수입","캐시백","받음","받았","들어옴","정산"];
 const INCOME = "수입", FALLBACK = "기타";
 const allCats = () => [...S.cats.map(c=>c.name), INCOME];
@@ -15,7 +16,9 @@ const ymd = d => d.getFullYear()+"-"+pad(d.getMonth()+1)+"-"+pad(d.getDate());
 const won = n => Math.round(n).toLocaleString("ko-KR");
 const esc = s => String(s).replace(/[&<>"']/g,c=>({"&":"&amp;","<":"&lt;",">":"&gt;",'"':"&quot;","'":"&#39;"}[c]));
 const uid = () => Date.now().toString(36)+Math.random().toString(36).slice(2,6);
-const color = n => n===INCOME ? "var(--k-teal)" : `var(--k-${(catByName(n)||{}).color||"gray"})`;
+// 카테고리 색: 팔레트 이름이면 토큰, 직접 고른 색(#RRGGBB)이면 그대로
+const colorValue = c => /^#[0-9a-f]{6}$/i.test(c||"") ? c : `var(--k-${c||"lime"})`;
+const color = n => n===INCOME ? "var(--k-teal)" : colorValue((catByName(n)||{}).color);
 const today = new Date(); today.setHours(0,0,0,0);
 const TODAY = ymd(today), THIS_YM = TODAY.slice(0,7);
 const daysIn = ym => { const [y,m]=ym.split("-").map(Number); return new Date(y,m,0).getDate(); };
@@ -203,7 +206,8 @@ async function understandItem(it, d, retry){
   if(lastAdded && lastAdded.id===it.id){ lastAdded={...lastAdded,...patch}; showDone(lastAdded,false); }
 }
 function flash(msg){ under.innerHTML=`<span class="done"></span>`; under.firstChild.textContent=msg; }
-const CHEV = `<svg width="8" height="13" viewBox="0 0 8 13" aria-hidden="true"><path d="M1.5 1.5 6.5 6.5l-5 5" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// 화살표: 연한 원 안의 작은 화살표 (Mono 로고의 원 모티프)
+const CHEV = `<svg class="chv" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="chv-bg" cx="9" cy="9" r="9"/><path d="M7.6 5.6 11 9l-3.4 3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 let shownOut = null, animId = 0, loaded = false;
 function renderHome(){
   const list = items(THIS_YM);
@@ -381,7 +385,7 @@ function renderSheet(){
     const pays=sumBy(outs, i=>methodName(i)||"미지정");
     if(pays.length){
       h += `<div class="cap"><span>결제수단</span></div><div class="group">`+
-        pays.map(([n,v])=>`<button class="cell" data-fp="${esc(n)}"><span class="ico" style="background:${isCash(n)?"var(--k-green)":"var(--label3)"}">${payIcon(n)}</span><span class="t"><span>${esc(n)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}% ${CHEV}</span></button>`).join("")+`</div>`;
+        pays.map(([n,v])=>`<button class="cell" data-fp="${esc(n)}">${payTile(kindOf(methodByName(n)||{name:n}), methodByName(n)?.id===S.def)}<span class="t"><span>${esc(n)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}% ${CHEV}</span></button>`).join("")+`</div>`;
     }
     h += `<h2 class="sec">내역</h2><div class="group"><button class="cell toggle" id="txToggle" aria-expanded="${txOpen}"><span class="t"><span>내역 ${list.length}건</span><small></small></span><span class="r chev${txOpen?" open":""}">${CHEV}</span></button></div>`;
     if(txOpen) h += dayGroups(list);
@@ -397,10 +401,21 @@ function renderSheet(){
   $("next").disabled = ym>=THIS_YM;
   $("next").onclick=()=>{ if(S.view<THIS_YM){ S.view=shiftYm(S.view,1); renderSheet(); } };
 }
-const CASH_ICON = `<svg width="18" height="12" viewBox="0 0 18 12" aria-hidden="true"><rect x="1" y="1" width="16" height="10" rx="1.6" fill="none" stroke="#fff" stroke-width="1.5"/><circle cx="9" cy="6" r="2.2" fill="none" stroke="#fff" stroke-width="1.5"/><path d="M4 4v4M14 4v4" stroke="#fff" stroke-width="1.5" stroke-linecap="round"/></svg>`;
-const isCash = name => /현금|cash/i.test(name||"");
-const payIcon = name => isCash(name) ? CASH_ICON : PAY_ICON;
-const PAY_ICON = `<svg width="16" height="12" viewBox="0 0 16 12" aria-hidden="true"><rect x="1" y="1" width="14" height="10" rx="2" fill="none" stroke="#fff" stroke-width="1.6"/><path d="M1 4.5h14" stroke="#fff" stroke-width="1.6"/></svg>`;
+// 결제수단 아이콘: 종류 4가지(카드·현금·간편결제·계좌), 회색 타일 안의 선 아이콘. 색은 카테고리 전용이라 쓰지 않는다
+const PAY_KINDS = [["card","카드"],["cash","현금"],["pay","간편결제"],["bank","계좌"],["point","포인트·상품권"]];
+const PAY_PATHS = {
+  card:'<rect x="3" y="5.5" width="18" height="13" rx="2.6"/><path d="M3 9.8h18M6.5 15h3.5"/>',
+  cash:'<rect x="2.8" y="6" width="18.4" height="12" rx="2.2"/><circle cx="12" cy="12" r="2.6"/><path d="M6.3 12h.01M17.7 12h.01"/>',
+  pay:'<rect x="6.5" y="3" width="11" height="18" rx="2.8"/><path d="M10.5 18h3"/>',
+  bank:'<path d="M3.5 9.3 12 4.5l8.5 4.8z"/><path d="M6 11.5v5.5M10 11.5v5.5M14 11.5v5.5M18 11.5v5.5M3.5 19.5h17"/>',
+  point:'<circle cx="12" cy="12" r="8.6"/><path d="M10 16.3V7.9h2.7a2.4 2.4 0 0 1 0 4.8H10"/>'
+};
+// 종류를 정하지 않았으면 이름으로 짐작
+const guessKind = name => /현금|cash/i.test(name||"") ? "cash" : /포인트|상품권|기프티|point|gift/i.test(name||"") ? "point" : /페이|pay/i.test(name||"") ? "pay" : /계좌|이체|은행|bank/i.test(name||"") ? "bank" : "card";
+const kindOf = m => m?.kind || guessKind(m?.name);
+const payGlyph = kind => `<svg class="pi" viewBox="0 0 24 24" aria-hidden="true">${PAY_PATHS[kind]||PAY_PATHS.card}</svg>`;
+const payTile = (kind, isDef) => `<span class="ptile${isDef?" def":""}">${payGlyph(kind)}</span>`;
+const methodByName = n => S.methods.find(m=>m.name===n);
 
 /* ---------- settings ---------- */
 let catsOpen = (()=>{ try{ return localStorage.getItem("moa-cats-open")==="1"; }catch(e){ return false; } })();
@@ -408,7 +423,7 @@ function renderSettings(){
   let h = `<h1>설정</h1>`;
   h += `<div class="cap"><span>월 예산</span></div><div class="group"><form class="cell" id="bForm"><span class="t"><input class="inline num" id="bIn" inputmode="numeric" value="${won(S.budget)}" aria-label="월 예산"></span><span class="r">원</span></form></div>`;
   h += `<div class="cap"><span>결제수단</span></div><div class="group">`+
-    S.methods.map(m=>`<button class="cell" data-m="${m.id}"><span class="ico" style="background:${m.id===S.def?"var(--accent)":isCash(m.name)?"var(--k-green)":"var(--label3)"}">${payIcon(m.name)}</span><span class="t"><span></span><small></small></span><span class="r">${m.id===S.def?"기본 ":""}${CHEV}</span></button>`).join("")+
+    S.methods.map(m=>`<button class="cell" data-m="${m.id}">${payTile(kindOf(m), m.id===S.def)}<span class="t"><span></span><small></small></span><span class="r">${m.id===S.def?"기본 ":""}${CHEV}</span></button>`).join("")+
     `<button class="cell" data-m="__new"><span class="t"><span style="color:var(--accent)">결제수단 추가</span></span></button></div>`;
   h += `<p class="foot-note">입력에 결제수단 이름이나 별칭이 들어 있으면 그 수단으로 기록해요. 예: "점심 9천 현대카드", "택시 1.2만 토스로". 없으면 기본 수단으로 기록해요.</p>`;
   const recTotal = S.recurring.filter(r=>!r.paused).reduce((a,r)=>a+r.amount,0);
@@ -500,7 +515,30 @@ function setupBackup(){
 
 /* ---------- action sheets ---------- */
 const asOpen = () => $("as").classList.contains("on");
-function showAS(html){ const as=$("as"); as.innerHTML=html; $("scrim2").classList.add("on"); as.classList.add("on"); return as; }
+// 가운데 팝업: 각 창의 버튼을 '부가 동작(작은 글자)'과 '취소 | 확인' 줄로 정리한다
+function showAS(html){
+  const as=$("as"); as.innerHTML=html;
+  const groups=[...as.querySelectorAll(":scope > .g")];
+  const main=groups[0], last=groups.length>1 ? groups[groups.length-1] : null;
+  const cancel=last?.querySelector(".btn");
+  const btns=[...main.querySelectorAll(":scope > .btn")];
+  // 확인 버튼: 폼 안의 submit만 (폼이 아닌 창의 버튼은 기본 type이 submit이라 따로 구분)
+  let primary=(main.tagName==="FORM" && btns.find(b=>b.getAttribute("type")==="submit")) || null;
+  let others=btns.filter(b=>b!==primary);
+  if(!primary && others.length===1 && main.querySelectorAll("input,textarea,.chips").length===0){ primary=others[0]; others=[]; }
+  if(others.length){
+    const extra=document.createElement("div"); extra.className="pop-extra";
+    others.forEach(b=>{ b.className = b.classList.contains("red") ? "red" : ""; extra.appendChild(b); });
+    main.appendChild(extra);
+  }
+  const foot=document.createElement("div"); foot.className="pop-foot";
+  if(cancel){ cancel.className=""; cancel.type="button"; foot.appendChild(cancel); }
+  if(primary){ primary.className="primary"+(primary.classList.contains("red")?" red":""); foot.appendChild(primary); }
+  main.appendChild(foot);
+  last?.remove();
+  $("scrim2").classList.add("on"); as.classList.add("on");
+  return as;
+}
 function closeAS(){ $("as").classList.remove("on"); $("scrim2").classList.remove("on"); }
 $("scrim2").onclick=closeAS;
 // 시트 안에서 입력칸을 누르면 그 칸이 보이게
@@ -531,16 +569,23 @@ function openMethod(mid){
   const m = isNew ? {id:uid(),name:"",alias:[]} : methodById(mid);
   const as = showAS(`<form class="g" id="mForm"><div class="h">${isNew?"결제수단 추가":"결제수단 편집"}</div>
     <div class="fields"><input id="mName" placeholder="이름 (예: 현대카드)" aria-label="이름"><input id="mAlias" placeholder="별칭, 쉼표로 구분 (예: 현대, 더블레드)" aria-label="별칭"></div>
+    <div class="kinds" role="radiogroup" aria-label="종류">${PAY_KINDS.map(([k,l])=>`<button type="button" role="radio" data-kind="${k}" aria-label="${l}" title="${l}">${payGlyph(k)}</button>`).join("")}</div>
     <button class="btn b" type="submit">저장</button>
     ${!isNew && m.id!==S.def?`<button class="btn" type="button" id="mDef">기본 수단으로 지정</button>`:""}
     ${!isNew && S.methods.length>1?`<button class="btn red" type="button" id="mDel">삭제</button>`:""}
   </form><div class="g"><button class="btn b" id="mCancel" type="button">취소</button></div>`);
   $("mName").value=m.name; $("mAlias").value=m.alias.join(", ");
+  // 종류: 직접 고르기 전까지는 이름으로 짐작해서 표시
+  let kind = m.kind || (isNew ? "card" : guessKind(m.name)), kindPicked = !!m.kind;
+  const paintKind = ()=>as.querySelectorAll("[data-kind]").forEach(b=>{ b.classList.toggle("sel", b.dataset.kind===kind); b.setAttribute("aria-checked", b.dataset.kind===kind); });
+  as.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>{ kind=b.dataset.kind; kindPicked=true; paintKind(); });
+  $("mName").addEventListener("input", ()=>{ if(!kindPicked){ kind=guessKind($("mName").value); paintKind(); } });
+  paintKind();
   setTimeout(()=>$("mName").focus(), 50);
   $("mForm").onsubmit=e=>{
     e.preventDefault();
     const name=$("mName").value.trim(); if(!name){ $("mName").focus(); return; }
-    m.name=name; m.alias=$("mAlias").value.split(",").map(s=>s.trim()).filter(Boolean);
+    m.name=name; m.alias=$("mAlias").value.split(",").map(s=>s.trim()).filter(Boolean); m.kind=kind;
     if(isNew) S.methods.push(m);
     saveSettings(); closeAS(); renderSheet();
   };
@@ -551,20 +596,30 @@ function openMethod(mid){
 
 function openCat(cid){
   const isNew = cid==="__new";
-  const c = isNew ? {id:uid(),name:"",color:COLORS.find(k=>!S.cats.some(x=>x.color===k))||"blue",keys:[]} : S.cats.find(x=>x.id===cid);
+  const c = isNew ? {id:uid(),name:"",color:COLORS.find(k=>!S.cats.some(x=>x.color===k))||"royal",keys:[]} : S.cats.find(x=>x.id===cid);
   if(!c) return;
   const used = items().filter(i=>i.c===c.name).length;
   let pick = c.color;
   const as = showAS(`<form class="g" id="cForm"><div class="h">${isNew?"카테고리 추가":"카테고리 편집"}</div>
     <div class="fields"><input id="cName" placeholder="이름 (예: 반려동물)" aria-label="이름" maxlength="10">
     <textarea id="cKeys" placeholder="키워드, 쉼표로 구분 (예: 사료, 동물병원, 간식)" aria-label="키워드"></textarea></div>
-    <div class="swatches">${COLORS.map(k=>`<button type="button" data-col="${k}" aria-label="${k}" class="${k===pick?"sel":""}" style="background:var(--k-${k})"></button>`).join("")}</div>
+    <div class="swatches">${COLORS.map(k=>`<button type="button" data-col="${k}" aria-label="${COLOR_NAMES[k]||k}" class="${k===pick?"sel":""}" style="background:var(--k-${k})"></button>`).join("")}<label id="cSpec" aria-label="직접 고르기"><i></i><input type="color" id="cCustom"></label></div>
     <button class="btn b" type="submit">저장</button>
     ${!isNew && c.name!==FALLBACK?`<button class="btn red" type="button" id="cDel">삭제${used?` (내역 ${used}건은 ${FALLBACK}로)`:""}</button>`:""}
   </form><div class="g"><button class="btn b" id="cCancel" type="button">취소</button></div>`);
   $("cName").value=c.name; $("cKeys").value=c.keys.join(", ");
   if(c.name===FALLBACK) $("cName").disabled=true;
-  as.querySelectorAll("[data-col]").forEach(b=>b.onclick=()=>{ pick=b.dataset.col; as.querySelectorAll("[data-col]").forEach(x=>x.classList.toggle("sel",x===b)); });
+  // 직접 고른 색: 스펙트럼 칸 가운데가 그 색으로 채워진다
+  const spec=$("cSpec"), custom=$("cCustom");
+  const paintSel=()=>{
+    as.querySelectorAll("[data-col]").forEach(x=>x.classList.toggle("sel", x.dataset.col===pick));
+    const isCustom=/^#/.test(pick); spec.classList.toggle("sel", isCustom);
+    spec.querySelector("i").style.background = isCustom ? pick : "";
+  };
+  if(/^#/.test(pick)) custom.value=pick;
+  as.querySelectorAll("[data-col]").forEach(b=>b.onclick=()=>{ pick=b.dataset.col; paintSel(); });
+  custom.addEventListener("input", ()=>{ pick=custom.value.toUpperCase(); paintSel(); });
+  paintSel();
   setTimeout(()=>(isNew?$("cName"):$("cKeys")).focus(), 50);
   $("cForm").onsubmit=async e=>{
     e.preventDefault();
