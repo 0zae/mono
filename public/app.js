@@ -206,15 +206,16 @@ async function understandItem(it, d, retry){
   if(lastAdded && lastAdded.id===it.id){ lastAdded={...lastAdded,...patch}; showDone(lastAdded,false); }
 }
 function flash(msg){ under.innerHTML=`<span class="done"></span>`; under.firstChild.textContent=msg; }
-// 화살표: 연한 원 안의 작은 화살표 (Mono 로고의 원 모티프)
-const CHEV = `<svg class="chv" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="chv-bg" cx="9" cy="9" r="9"/><path d="M7.6 5.6 11 9l-3.4 3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+// 화살표: 목록은 iOS처럼 가늘고 연한 화살표, 첫 화면 '내역 보기' 하나만 동그란 원 화살표
+const CHEV = `<svg class="chv" width="7" height="12" viewBox="0 0 7 12" aria-hidden="true"><path d="M1.2 1.2 5.8 6l-4.6 4.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const CHEV_ROUND = `<svg class="chv-round" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="chv-bg" cx="9" cy="9" r="9"/><path d="M7.6 5.6 11 9l-3.4 3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 let shownOut = null, animId = 0, loaded = false;
 function renderHome(){
   const list = items(THIS_YM);
   const out = list.filter(i=>i.t==="out").reduce((s,i)=>s+i.a,0);
   // 기록을 불러온 뒤에 비어 있으면 0원에서 시작: 이번 달 첫 기록도 숫자가 올라가게
-  if(!list.length){ $("open").innerHTML = `내역 보기 ${CHEV}`; shownOut = loaded ? 0 : null; return; }
-  $("open").innerHTML = `이번 달 <b class="num" id="outNum"></b> 사용 ${CHEV}`;
+  if(!list.length){ $("open").innerHTML = `내역 보기 ${CHEV_ROUND}`; shownOut = loaded ? 0 : null; return; }
+  $("open").innerHTML = `이번 달 <b class="num" id="outNum"></b> 사용 ${CHEV_ROUND}`;
   countTo(out);
 }
 // 금액이 바뀌면 숫자가 굴러가듯 바뀐다 (처음 열 때는 바로 표시)
