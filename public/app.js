@@ -236,11 +236,70 @@ function countTo(target){
   animId = requestAnimationFrame(step);
 }
 
+/* ---------- 결제 알림 (단축어 → iOS 앱 → 여기) ---------- */
+// iOS 쪽이 Preferences(monoPending)에 쌓아 둔 결제를 읽어서 기록한다.
+// approved: 알림에서 [기록]을 누름 → 바로 기록 / review·pending: 앱 안에서 다시 묻기 / ignored: 버림
+const nativePrefs = ()=> window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.Preferences;
+async function readPending(P){ const {value} = await P.get({key:"monoPending"}); try{ return JSON.parse(value||"[]"); }catch(e){ return []; } }
+async function recordParsed(r, x){
+  if(r.cancel || !(r.total>0)) return null;
+  const memo = r.merchant || "결제";
+  const method = matchMethod(r.payment) || (r.payment ? {id:null, name:r.payment} : (methodById(S.def)||null));
+  const cat = (r.category && allCats().includes(r.category)) ? r.category : (localCat(memo,"out") || FALLBACK);
+  const d = r.date || ymd(new Date(x.ts || Date.now()));
+  const it = {id:uid(), ts:Date.now(), d, t: cat===INCOME?"in":"out", a:r.total, c:cat, m:memo, r:x.text};
+  if(method){ it.p = method.id; it.pn = method.name; }
+  (S.months[d.slice(0,7)] ||= []).push(it);
+  await api("POST","items",it);
+  // Gemini가 없으면 기억해 둔 상호로 분류 보강
+  if(!S.ai) understandItem(it, {raw:`${memo} ${r.total}`, memo, type:it.t, cat:null, methodGuessed:false, unregistered:false});
+  return it;
+}
+let syncing = false;
+async function syncPending(){
+  const P = nativePrefs();
+  if(!P || syncing || !document.documentElement.classList.contains("splash-done")) return;
+  syncing = true;
+  try{
+    const q = await readPending(P);
+    if(!q.length) return;
+    const handled = new Set(q.map(x=>x.id));
+    const added = [];
+    for(const x of q.filter(x=>x.status==="approved")){
+      const it = await recordParsed(await api("POST","payment/parse",{text:x.text}), x);
+      if(it) added.push(it);
+    }
+    const ask = q.filter(x=>x.status==="review" || x.status==="pending");
+    // 처리한 것만 지운다 (그 사이 새로 들어온 건 남김)
+    const latest = await readPending(P);
+    await P.set({key:"monoPending", value: JSON.stringify(latest.filter(x=>!handled.has(x.id)))});
+    renderHome(); if(sheetOpen) renderSheet();
+    if(added.length===1){ lastAdded = added[0]; showDone(added[0], false); }
+    else if(added.length>1) flash(`결제 알림에서 ${added.length}건 기록했어요.`);
+    if(ask.length) askPayments(ask);
+  } finally { syncing = false; }
+}
+// 알림에 답하지 않은 결제: 앱 안에서 한 건씩 묻기
+async function askPayments(list){
+  const x = list[0]; if(!x) return;
+  const r = await api("POST","payment/parse",{text:x.text});
+  const next = ()=>{ closeAS(); setTimeout(()=>askPayments(list.slice(1)), 250); };
+  if(r.cancel || !(r.total>0)) return askPayments(list.slice(1));
+  const as = showAS(`<div class="g"><div class="h"></div><div class="pay-ask"></div>
+    <button class="btn b" id="payOk">기록</button></div><div class="g"><button class="btn b" id="payNo">무시</button></div>`);
+  as.querySelector(".h").textContent = "이 결제를 기록할까요?";
+  as.querySelector(".pay-ask").textContent = `${r.merchant || "결제"} · ${won(r.total)}원${r.payment ? " · "+r.payment : ""}${r.date && r.date!==TODAY ? " · "+dayLabel(r.date) : ""}`;
+  $("payOk").onclick = async ()=>{ const it = await recordParsed(r, x); renderHome(); if(sheetOpen) renderSheet(); if(it){ lastAdded = it; showDone(it, false); } next(); };
+  $("payNo").onclick = next;
+}
+window.addEventListener("monoPending", ()=>syncPending());
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") syncPending(); });
+
 /* ---------- 시작 애니메이션 ---------- */
 let appReady = false;
 function runSplash(){
   const sp = $("splash"), svg = $("splashSvg"), logoImg = document.querySelector(".logo img");
-  const finish = ()=>{ document.documentElement.classList.add("splash-done"); q.focus(); };
+  const finish = ()=>{ document.documentElement.classList.add("splash-done"); q.focus(); syncPending(); };
   if(!sp) return finish();
   const set = (id, k, v)=>$(id).setAttribute(k, v);
   const ease = t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2, out = t=>1-Math.pow(1-t,3), clamp = t=>Math.min(1,Math.max(0,t));
@@ -330,9 +389,10 @@ function remove(id){
 }
 
 /* ---------- sheet ---------- */
-let sheetOpen=false, editingBudget=false, view="list", txOpen=false;
+let sheetOpen=false, editingBudget=false, view="list", txOpen=false, selDay=null;
+let txMode = "list"; // 내역은 목록이 기본, 달력은 아이콘을 눌렀을 때만
 function openSheet(v){
-  q.blur(); window.scrollTo(0,0); txOpen=false; filter=null; sheetOpen=true; view=v||"list"; S.view=THIS_YM; renderSheet();
+  q.blur(); window.scrollTo(0,0); txOpen=false; selDay=null; txMode="list"; filter=null; sheetOpen=true; view=v||"list"; S.view=THIS_YM; renderSheet();
   $("scroll").scrollTop = 0;
   requestAnimationFrame(()=>{ $("scrim").classList.add("on"); $("sheet").classList.add("on"); });
 }
@@ -440,6 +500,31 @@ function dayGroups(list){
   });
   return h;
 }
+const CAL_ICON = `<svg class="pi" viewBox="0 0 24 24" aria-hidden="true"><rect x="3.5" y="5" width="17" height="15.5" rx="3"/><path d="M3.5 9.8h17M8.2 3v3.6M15.8 3v3.6"/><path d="M7.6 13.4h.01M12 13.4h.01M16.4 13.4h.01M7.6 17h.01M12 17h.01"/></svg>`;
+// 달력: 날짜 아래에 그날 쓴 금액, 날짜를 누르면 그날 내역만 아래에
+const shortWon = v=>v>=10000 ? (v/10000).toFixed(v%10000?1:0).replace(/\.0$/,"")+"만" : v>=1000 ? (v/1000).toFixed(v%1000?1:0).replace(/\.0$/,"")+"천" : String(v);
+function calendar(ym, list){
+  const [y,m] = ym.split("-").map(Number), first = new Date(y,m-1,1).getDay(), dim = daysIn(ym);
+  const byDay = {}; list.forEach(i=>{ const d=+i.d.slice(8); (byDay[d] ||= {out:0,inc:0,items:[]}); byDay[d].items.push(i); if(i.t==="in") byDay[d].inc+=i.a; else byDay[d].out+=i.a; });
+  const isNow = ym===THIS_YM, td = today.getDate();
+  // 고른 날이 없으면: 이번 달은 오늘, 지난 달은 마지막으로 기록한 날
+  if(!selDay || selDay.slice(0,7)!==ym){
+    const lastDay = Object.keys(byDay).map(Number).sort((a,b)=>b-a)[0];
+    selDay = `${ym}-${pad(isNow ? td : (lastDay||1))}`;
+  }
+  const sd = +selDay.slice(8);
+  let h = `<div class="group cal"><div class="cal-wk">${WD.map(w=>`<span>${w}</span>`).join("")}</div><div class="cal-grid">`;
+  for(let i=0;i<first;i++) h += `<span></span>`;
+  for(let d=1; d<=dim; d++){
+    const b = byDay[d], future = isNow && d>td;
+    const amt = b ? (b.out ? "-"+shortWon(b.out) : "+"+shortWon(b.inc)) : "";
+    h += `<button class="cal-d${isNow&&d===td?" today":""}${future?" future":""}${d===sd?" sel":""}" data-day="${ym}-${pad(d)}"${future?" disabled":""}><span class="n">${d}</span><span class="m${b&&!b.out?" in":""}">${amt}</span></button>`;
+  }
+  h += `</div></div>`;
+  const dayItems = byDay[sd]?.items || [];
+  h += dayItems.length ? dayGroups(dayItems) : `<div class="cap"><span>${dayLabel(selDay)}</span></div><div class="cal-empty">기록이 없어요</div>`;
+  return h;
+}
 // 분석에서 카테고리·결제수단을 누르면 그 내역만 모아 보기
 let filter = null, listScroll = 0;
 function renderFilter(){
@@ -467,10 +552,12 @@ function renderSheet(){
   const pct = S.budget ? Math.min(100,out/S.budget*100) : 0;
 
   let h = `<div class="title-row"><h1>${+m}월${y!=String(today.getFullYear())?` <span style="color:var(--label2);font-weight:600;font-size:22px">${y}</span>`:""}</h1><div class="mnav" id="mnav"><button id="prev" aria-label="이전 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M7.5 2 1.5 8l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button id="next" aria-label="다음 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M2.5 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>`;
-  h += `<div class="sum"><span class="k">${left>=0?"남은 예산":"예산 초과"}</span><span class="v num" style="${left<0?"color:var(--red)":""}">${won(Math.abs(left))}원</span>
+  // 크게: 이 달에 쓴 돈 / 작게: 남은 예산·하루 쓸 수 있는 돈
+  // 크게: 쓴 돈 / 예산, 아래 한 줄: 남은 예산 · 하루
+  h += `<div class="sum"><span class="v num">${won(out)}원<small class="of"> / ${won(S.budget)}원</small></span>
     <div class="meter"><i class="${out>S.budget?"over":""}" style="width:${pct}%"></i></div>
-    <div class="row"><span>${isNow?"하루 ":"하루 평균 "}<b class="num">${won(perDay)}원</b>${isNow?" 쓸 수 있어요":""}</span>
-    <span class="num">예산 ${won(S.budget)}원</span></div></div>`;
+    <div class="row"><span>${left>=0?`남은 예산 <b class="num">${won(left)}원</b>`:`<b class="num" style="color:var(--red)">${won(-left)}원 초과</b>`}</span>
+    <span>${isNow?"하루":"하루 평균"} <b class="num">${won(perDay)}원</b></span></div></div>`;
 
   if(!list.length){ h += `<div class="empty">${+m}월에는 기록이 없어요.</div>`; }
   else{
@@ -483,19 +570,27 @@ function renderSheet(){
       h += `<div class="cap"><span>결제수단</span></div><div class="group">`+
         pays.map(([n,v])=>`<button class="cell" data-fp="${esc(n)}">${payTile(kindOf(methodByName(n)||{name:n}), methodByName(n)?.id===S.def)}<span class="t"><span>${esc(n)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}% ${CHEV}</span></button>`).join("")+`</div>`;
     }
-    h += `<h2 class="sec">내역</h2><div class="group"><button class="cell toggle" id="txToggle" aria-expanded="${txOpen}"><span class="t"><span>내역 ${list.length}건</span><small></small></span><span class="r chev${txOpen?" open":""}">${CHEV}</span></button></div>`;
-    if(txOpen) h += dayGroups(list);
+    // 내역: 목록 / 달력
+    h += `<div class="sec-row"><h2 class="sec">내역</h2><button class="txm${txMode==="cal"?" on":""}" data-txm="${txMode==="cal"?"list":"cal"}" aria-label="${txMode==="cal"?"목록으로 보기":"달력으로 보기"}" aria-pressed="${txMode==="cal"}">${CAL_ICON}</button></div>`;
+    if(txMode==="cal") h += calendar(ym, list);
+    else {
+      h += `<div class="group"><button class="cell toggle" id="txToggle" aria-expanded="${txOpen}"><span class="t"><span>내역 ${list.length}건</span><small></small></span><span class="r chev${txOpen?" open":""}">${CHEV}</span></button></div>`;
+      if(txOpen) h += dayGroups(list);
+    }
   }
   $("scroll").innerHTML = h;
+  // 목록/달력 전환, 달력에서 날짜 고르기
+  $("scroll").querySelectorAll("[data-txm]").forEach(b=>b.onclick=()=>{ txMode=b.dataset.txm; const y=$("scroll").scrollTop; renderSheet(); $("scroll").scrollTop=y; });
+  $("scroll").querySelectorAll("[data-day]").forEach(b=>b.onclick=()=>{ selDay=b.dataset.day; const y=$("scroll").scrollTop; renderSheet(); $("scroll").scrollTop=y; });
   const tt = $("txToggle");
   if(tt){
     const last = list[0];
     tt.querySelector("small").textContent = `최근: ${last.m} ${last.t==="in"?"+":"-"}${won(last.a)}원 · ${dayLabel(last.d)}`;
     tt.onclick = ()=>{ txOpen = !txOpen; const y = $("scroll").scrollTop; renderSheet(); $("scroll").scrollTop = y; };
   }
-  $("prev").onclick=()=>{ S.view=shiftYm(S.view,-1); renderSheet(); };
+  $("prev").onclick=()=>{ S.view=shiftYm(S.view,-1); selDay=null; renderSheet(); };
   $("next").disabled = ym>=THIS_YM;
-  $("next").onclick=()=>{ if(S.view<THIS_YM){ S.view=shiftYm(S.view,1); renderSheet(); } };
+  $("next").onclick=()=>{ if(S.view<THIS_YM){ S.view=shiftYm(S.view,1); selDay=null; renderSheet(); } };
 }
 // 결제수단 아이콘: 종류 4가지(카드·현금·간편결제·계좌), 회색 타일 안의 선 아이콘. 색은 카테고리 전용이라 쓰지 않는다
 const PAY_KINDS = [["card","카드"],["cash","현금"],["pay","간편결제"],["bank","계좌"],["point","포인트·상품권"]];
@@ -522,6 +617,12 @@ function renderSettings(){
     S.methods.map(m=>`<button class="cell" data-m="${m.id}">${payTile(kindOf(m), m.id===S.def)}<span class="t"><span></span><small></small></span><span class="r">${m.id===S.def?"기본 ":""}${CHEV}</span></button>`).join("")+
     `<button class="cell" data-m="__new"><span class="t"><span style="color:var(--accent)">결제수단 추가</span></span></button></div>`;
   h += `<p class="foot-note">입력에 결제수단 이름이나 별칭이 들어 있으면 그 수단으로 기록해요. 예: "점심 9천 현대카드", "택시 1.2만 토스로". 없으면 기본 수단으로 기록해요.</p>`;
+  // 결제 알림 자동 기록 (단축어 연결 안내)
+  const native = !!window.Capacitor?.isNativePlatform?.();
+  h += `<div class="cap"><span>결제 알림 자동 기록</span></div><div class="group">
+    <button class="cell" data-guide="pay"><span class="t"><span>애플페이 연결하기</span></span><span class="r">${CHEV}</span></button>
+    <button class="cell" data-guide="sms"><span class="t"><span>카드 문자 연결하기</span></span><span class="r">${CHEV}</span></button></div>
+    <p class="foot-note">${native ? "결제하면 \"기록할까요?\" 알림이 와요. [기록]을 누르면 Mono가 열리며 바로 기록돼요. 카드사 앱 알림은 iOS가 막아 두어서, 스크린샷을 카메라 버튼으로 읽어 주세요." : "아이폰 앱(Mono)에서만 쓸 수 있어요."}</p>`;
   const recTotal = S.recurring.filter(r=>!r.paused).reduce((a,r)=>a+r.amount,0);
   h += `<div class="cap"><span>정기 결제</span><span class="num">${S.recurring.length?"매월 "+won(recTotal)+"원":""}</span></div><div class="group">`+
     S.recurring.slice().sort((a,b)=>a.day-b.day).map(r=>`<button class="cell" data-rec="${esc(r.id)}"><span class="cdot" style="background:${r.paused?"var(--label3)":color(r.cat)}"></span><span class="t"><span></span><small></small></span><span class="r num">${won(r.amount)}원 ${CHEV}</span></button>`).join("")+
@@ -647,6 +748,7 @@ $("scroll").addEventListener("click", e=>{
   const m=e.target.closest("[data-m]"); if(m) return openMethod(m.dataset.m);
   const c=e.target.closest("[data-cat]"); if(c) return openCat(c.dataset.cat);
   const r=e.target.closest("[data-rec]"); if(r) return openRec(r.dataset.rec);
+  const gd=e.target.closest("[data-guide]"); if(gd) return openGuide(gd.dataset.guide);
 });
 function openTx(id){
   const [ym,i]=find(id); if(!ym) return; const it=S.months[ym][i];
@@ -783,6 +885,26 @@ function openRec(rid){
   const pz=$("rPause"); if(pz) pz.onclick=async()=>{ r.paused=!r.paused; await saveSettings(); closeAS(); renderSheet(); };
   const del=$("rDel"); if(del) del.onclick=async()=>{ S.recurring=S.recurring.filter(x=>x!==r); await saveSettings(); closeAS(); renderSheet(); };
   $("rCancel").onclick=closeAS;
+}
+// 단축어 자동화 설정 안내
+function openGuide(kind){
+  const steps = kind==="pay" ? [
+    "단축어 앱 → 아래 '자동화' → 오른쪽 위 ＋",
+    "'월렛' 선택 → 연결할 카드 고르기 → '즉시 실행' → 다음",
+    "'새로운 빈 자동화' → 동작 추가에서 'Mono에 결제 보내기' 검색해서 추가",
+    "'결제 내용'을 누르고 변수에서 '가맹점', '금액', '카드 또는 패스'를 차례로 넣기 → 완료",
+  ] : [
+    "단축어 앱 → 아래 '자동화' → 오른쪽 위 ＋",
+    "'메시지' 선택 → '보낸 사람'에 카드사 번호를 고르거나, '메시지에 포함'에 '승인' 입력 → '즉시 실행' → 다음",
+    "'새로운 빈 자동화' → 동작 추가에서 'Mono에 결제 보내기' 검색해서 추가",
+    "'결제 내용'을 누르고 변수에서 '메시지'(단축어 입력) 넣기 → 완료",
+  ];
+  const as = showAS(`<div class="g"><div class="h">${kind==="pay"?"애플페이 연결하기":"카드 문자 연결하기"}</div>
+    <ol class="guide">${steps.map(t=>`<li></li>`).join("")}</ol>
+    <button class="btn b" id="gOpen">단축어 앱 열기</button></div><div class="g"><button class="btn b" id="gClose">닫기</button></div>`);
+  as.querySelectorAll(".guide li").forEach((li,k)=>li.textContent=steps[k]);
+  $("gOpen").onclick = ()=>{ location.href = "shortcuts://"; };
+  $("gClose").onclick = closeAS;
 }
 // 분류 이름이 바뀌거나 지워지면 내역과 기억해 둔 상호도 함께 옮긴다
 async function renameCat(from,to){

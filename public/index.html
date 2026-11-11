@@ -129,6 +129,7 @@ h1{font-size:34px;line-height:41px;font-weight:700;letter-spacing:.01em;margin:4
 .meter i.over{background:var(--red)}
 .sum .row{display:flex;justify-content:space-between;font-size:13px;line-height:18px;color:var(--label2)}
 .sum .row b{color:var(--label);font-weight:600}
+.sum .v .of{font-size:15px;font-weight:500;color:var(--label2);letter-spacing:0;margin-left:2px}
 .cap{font-size:13px;line-height:18px;color:var(--label2);text-transform:none;padding:0 16px 7px;display:flex;justify-content:space-between}
 .group{background:var(--cell);border-radius:10px;overflow:hidden;margin-bottom:24px}
 .sheet .group{box-shadow:0 0 0 .5px var(--card-edge)}
@@ -151,6 +152,24 @@ button.cell:active{background:var(--fill)}
 .chv{flex:none;color:var(--chev-line);vertical-align:middle;margin-left:8px}
 .chv-round{flex:none;color:var(--chev);vertical-align:middle}
 .chv-bg{fill:var(--fill)}
+/* 내역: 목록 / 달력 */
+.sec-row{display:flex;align-items:center;justify-content:space-between;margin:6px 0 12px}
+.sec-row h2.sec{margin:0}
+.txm{width:34px;height:34px;border:0;border-radius:10px;background:var(--fill);color:var(--label2);display:grid;place-items:center;padding:0}
+.txm .pi{width:20px;height:20px}
+.txm.on{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
+.cal{padding:12px 8px 8px}
+.cal-wk{display:grid;grid-template-columns:repeat(7,1fr);text-align:center;font-size:11px;line-height:14px;color:var(--label3);margin-bottom:6px}
+.cal-wk span:first-child{color:var(--red)}
+.cal-grid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:4px}
+.cal-d{border:0;background:none;height:48px;display:flex;flex-direction:column;align-items:center;gap:2px;border-radius:10px;padding:4px 0 0;color:var(--label)}
+.cal-d .n{font-size:14px;width:26px;height:26px;line-height:26px;border-radius:50%;text-align:center}
+.cal-d .m{font-size:9.5px;line-height:12px;color:var(--label2);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
+.cal-d .m.in{color:var(--green)}
+.cal-d.today .n{background:var(--accent);color:#fff;font-weight:600}
+.cal-d.sel{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+.cal-d.future .n{color:var(--label3)}
+.cal-empty{font-size:14px;color:var(--label2);text-align:center;padding:14px 0 24px}
 h2.sec{font-size:22px;line-height:28px;font-weight:700;letter-spacing:.01em;margin:6px 0 12px}
 .ico{width:30px;height:30px;border-radius:7px;display:grid;place-items:center;color:#fff;font-size:13px;font-weight:600;flex:none}
 .cell .t{flex:1;min-width:0;padding:11px 0;display:flex;flex-direction:column;gap:1px}
@@ -187,6 +206,9 @@ h2.sec{font-size:22px;line-height:28px;font-weight:700;letter-spacing:.01em;marg
 .as .fields .day-row input{width:64px;text-align:center}
 .as .hint-line{font-size:12px;color:var(--label2);text-align:center;padding:0 16px 10px;min-height:1px}
 /* 부가 동작(기본 지정·삭제 등): 작은 글자 버튼 */
+.as .guide{margin:0;padding:0 18px 16px 36px;font-size:14px;line-height:1.5;color:var(--label)}
+.as .guide li{margin-bottom:8px}
+.as .pay-ask{font-size:16px;text-align:center;padding:0 18px 16px;color:var(--label);line-height:1.4}
 .as .pop-extra{display:flex;justify-content:center;flex-wrap:wrap;gap:4px 18px;padding:0 16px 12px}
 .as .pop-extra button{border:0;background:none;padding:4px 0;font-size:14px;color:var(--label2)}
 .as .pop-extra button.red{color:var(--red)}

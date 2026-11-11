@@ -199,9 +199,50 @@ function askGemini(key, s, text, memo, methods) {
 }
 
 // 영수증 사진 읽기: 상호, 최종 결제 금액, 날짜, 결제수단
+// 결제 알림 글(애플페이 정보, 카드 승인 문자) 해석. Gemini가 있으면 Gemini, 없으면 규칙
+export function parsePaymentRule(text) {
+  const t = text.replace(/\s+/g, " ");
+  const cancel = /취소|승인거절|거절/.test(t);
+  // 금액: "원"이 붙은 숫자 → ₩숫자 → (애플페이처럼) 날짜·시간·카드번호가 아닌 100 이상 숫자
+  const amt = (t.match(/([0-9][0-9,]*)\s*원/) || t.match(/₩\s*([0-9][0-9,]*)/) ||
+    t.replace(/\(\d+\)|\d{1,2}[\/.]\d{1,2}|\d{1,2}:\d{2}/g, " ").match(/(?:^|\s)(\d[\d,]{2,})(?=\s|$)/) || [])[1];
+  const card = (t.match(/([가-힣A-Za-z]{1,8}(?:카드|페이|체크))/) || [])[1] || "";
+  let date = "";
+  const md = t.match(/(\d{1,2})[\/.](\d{1,2})(?!\d)/);
+  if (md) { const y = new Date().getFullYear(); date = `${y}-${pad2(+md[1])}-${pad2(+md[2])}`; }
+  // 상호: 금액·카드·날짜·시간·흔한 문구를 뺀 나머지에서 마지막 덩어리
+  let rest = t.replace(/\[[^\]]*\]/g, " ").replace(/\([^)]*\)/g, " ").replace(/([0-9][0-9,]*)\s*원/g, " ").replace(/₩\s*[0-9,]+/g, " ")
+    .replace(/\d{1,2}[\/.]\d{1,2}/g, " ").replace(/\d{1,2}:\d{2}/g, " ").replace(card, " ")
+    .replace(/(승인|일시불|할부|\d+개월|누적|잔액|체크|신용|사용|결제|Web발신|국외|해외|\*+|[가-힣]\*[가-힣]?님?)/g, " ");
+  const words = rest.replace(/[()\[\]·,:]/g, " ").split(" ").map((w) => w.trim()).filter((w) => w && !/^[\d,]+$/.test(w) && w !== "취소");
+  return { merchant: words.slice(-2).join(" ") || words[0] || "", total: amt ? Number(amt.replace(/,/g, "")) : 0, date, payment: card, cancel };
+}
+async function parsePayment(key, s, text) {
+  if (!key) return parsePaymentRule(text);
+  const prompt = [
+    "아래는 한국의 결제 알림 글이다(애플페이 거래 정보이거나 카드사 승인 문자). 가계부에 기록할 정보를 뽑아라.",
+    `오늘 날짜: ${new Date().toISOString().slice(0, 10)}`,
+    `글: """${text}"""`,
+    "1. merchant: 가맹점 정식 상호(지점명·법인 표기 제외). 2. total: 실제 결제 금액(원, 숫자). 누적·잔액·한도 금액이 아니다.",
+    "3. date: 결제 날짜 YYYY-MM-DD(없으면 빈 문자열). 4. payment: 카드사·결제수단 이름 그대로(예: 현대카드).",
+    "5. category: 아래 중 하나.", ...catLines(s),
+    "6. cancel: 승인 취소·거절 문자면 true. 7. isPayment: 결제 알림이 아니면 false.",
+  ].join("\n");
+  try {
+    const r = await gemini(key, [{ text: prompt }], {
+      type: "OBJECT",
+      properties: { merchant: { type: "STRING" }, total: { type: "NUMBER" }, date: { type: "STRING" }, payment: { type: "STRING" },
+        category: { type: "STRING", enum: catNames(s) }, cancel: { type: "BOOLEAN" }, isPayment: { type: "BOOLEAN" } },
+      required: ["merchant", "total", "date", "payment", "category", "cancel", "isPayment"],
+    });
+    if (!r.isPayment) return { ...parsePaymentRule(text), total: 0 };
+    return r;
+  } catch (e) { return parsePaymentRule(text); }
+}
+
 export async function readReceipt(key, s, { data, mime }) {
   const prompt = [
-    "이 사진은 한국 영수증(카드 전표, 배달 앱 영수증 화면 포함)이다. 가계부에 한 줄로 기록할 정보를 뽑아라.",
+    "이 사진은 한국 영수증이거나 결제 내역 화면이다(카드 전표, 배달 앱 영수증, 카드사 앱·문자의 결제 알림 스크린샷 포함). 가계부에 한 줄로 기록할 정보를 뽑아라. 여러 건이 보이면 가장 위(최근) 한 건만.",
     `오늘 날짜: ${new Date().toISOString().slice(0, 10)}`,
     `사용자의 결제수단: ${s.methods.map((m) => m.name).join(", ") || "(없음)"}`,
     "",
@@ -329,6 +370,10 @@ export async function localApi(method, path, body = {}) {
       console.warn("[receipt]", e.message);
       return { error: e.status === 429 ? "Gemini 사용 한도에 걸렸어요. 잠시 뒤 다시 찍어 주세요." : "영수증을 읽지 못했어요. 잠시 뒤 다시 시도해 주세요." };
     }
+  }
+  if (name === "payment" && id === "parse" && method === "POST") {
+    const r = await parsePayment(await geminiKey(), s, String(body.text || ""));
+    return { ...r, date: /^\d{4}-\d{2}-\d{2}$/.test(r.date || "") ? r.date : "", total: Math.round(r.total || 0) };
   }
   if (name === "understand" && method === "POST") {
     try { return await understand(body); }
