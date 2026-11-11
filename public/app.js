@@ -224,8 +224,11 @@ let draft=null, lastAdded=null, flashTimer;
 function preview(){
   draft = parse(q.value);
   go.hidden = !(draft && draft.amount>0);
-  $("cam").hidden = !!q.value.trim();
-  if(!draft){ under.innerHTML=""; return; }
+  // 한글 조합 중에 iOS가 글자를 잠깐 지웠다 다시 넣는 순간(예: '엊' → '어제')이 있어서,
+  // 비우는 건 아주 잠깐 미뤘다가 정말 비어 있을 때만 한다 → 애니메이션이 다시 시작되지 않게
+  clearTimeout(preview.clr);
+  if(!draft){ preview.clr = setTimeout(()=>{ if(q.value.trim()) return; under.innerHTML=""; under.classList.remove("enter"); $("cam").hidden=false; }, 160); return; }
+  $("cam").hidden = true;
   const c = draft.cat || "카테고리 자동";
   const pm = draft.method ? `<span class="sep">·</span><span class="tag" style="${draft.methodGuessed?"":"color:var(--label)"}">${esc(draft.method.name)}${draft.unregistered?" (미등록)":""}</span>` : "";
   // 비어 있다가 처음 뜰 때만 움직인다 (타자 칠 때마다 다시 움직이지 않게)
@@ -251,7 +254,7 @@ $("form").addEventListener("submit", e=>{
   const ym = it.d.slice(0,7);
   (S.months[ym] ||= []).push(it);
   const d = draft;
-  q.value=""; go.hidden=true; $("cam").hidden=false; lastAdded=it;
+  clearTimeout(preview.clr); q.value=""; go.hidden=true; $("cam").hidden=false; lastAdded=it;
   showDone(it, !d.cat);
   renderHome(); if(sheetOpen) renderSheet();
   api("POST","items",it).then(()=>understandItem(it, d)).catch(fail);
@@ -284,7 +287,7 @@ async function understandItem(it, d, retry){
   if(Object.keys(patch).length) update(it.id, patch);
   if(lastAdded && lastAdded.id===it.id){ lastAdded={...lastAdded,...patch}; showDone(lastAdded,false); }
 }
-function flash(msg){ under.innerHTML=`<span class="done"></span>`; under.firstChild.textContent=msg; }
+function flash(msg){ clearTimeout(preview.clr); under.innerHTML=`<span class="done"></span>`; under.firstChild.textContent=msg; }
 // 화살표: 목록은 iOS처럼 가늘고 연한 화살표, 첫 화면 '내역 보기' 하나만 동그란 원 화살표
 const CHEV = `<svg class="chv" width="7" height="12" viewBox="0 0 7 12" aria-hidden="true"><path d="M1.2 1.2 5.8 6l-4.6 4.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 const CHEV_ROUND = `<svg class="chv-round" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="chv-bg" cx="9" cy="9" r="9"/><path d="M7.6 5.6 11 9l-3.4 3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
