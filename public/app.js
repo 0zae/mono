@@ -85,6 +85,14 @@ function parseMethod(text){
     const hit = text.match(new RegExp("(^|\\s)"+reEsc(k)+PAY_TAIL+"(?=\\s|$)","i"));
     if(hit) return {method:m, rest:cut(text,hit)};
   }
+  // 별칭은 단어 안에 들어 있어도 그 수단으로 ("현대" 별칭 → "현대카드로", "현대카드" 모두) — 그 단어는 메모에서 뺀다
+  const aliases = [];
+  S.methods.forEach(m=>m.alias.forEach(k=>{ k=k.trim(); if(k) aliases.push([k,m]); }));
+  aliases.sort((a,b)=>b[0].length-a[0].length);
+  for(const [k,m] of aliases){
+    const hit = text.match(new RegExp("(^|\\s)(\\S*"+reEsc(k)+"\\S*)(?=\\s|$)","i"));
+    if(hit) return {method:m, rest:cut(text,hit)};
+  }
   // 등록 안 된 카드·간편결제 이름: 상호로 착각하지 않게 떼어 두고 이름만 남긴다
   const other = text.match(new RegExp("(^|\\s)([^\\s\\d]{1,10}?(?:카드|페이|pay))"+PAY_TAIL+"(?=\\s|$)","i"));
   if(other) return {method:{id:null,name:other[2]}, rest:cut(text,other), unregistered:true};
@@ -94,7 +102,10 @@ function parseMethod(text){
 function matchMethod(name){
   const n = String(name||"").toLowerCase().replace(/\s/g,"");
   if(!n) return null;
-  return S.methods.find(m=>[m.name,...m.alias].some(k=>{ k=k.toLowerCase().replace(/\s/g,""); return k && k===n; })) || null;
+  const norm = k=>String(k).toLowerCase().replace(/\s/g,"");
+  return S.methods.find(m=>[m.name,...m.alias].some(k=>{ k=norm(k); return k && k===n; }))
+    // 별칭이 결제 이름 안에 들어 있으면 그 수단 (예: 별칭 "현대" → "현대카드")
+    || S.methods.find(m=>m.alias.some(k=>{ k=norm(k); return k && n.includes(k); })) || null;
 }
 const methodById = id => S.methods.find(m=>m.id===id);
 const methodName = it => (methodById(it.p)||{}).name || it.pn || "";

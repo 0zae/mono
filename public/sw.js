@@ -1,5 +1,5 @@
 // 앱 파일을 캐시해서 인터넷 없이도 열리게 한다. 기록은 IndexedDB에 따로 있다.
-const CACHE = "mono-v19";
+const CACHE = "mono-v20";
 const SHELL = ["./", "./index.html", "./app.js", "./local.js", "./glass.css", "./logo.svg", "./icon.svg", "./favicon.png", "./apple-touch-icon.png",
   "./icon-192.png", "./icon-512.png", "./manifest.webmanifest"];
 self.addEventListener("install", (e) => e.waitUntil(caches.open(CACHE).then((c) => c.addAll(SHELL)).then(() => self.skipWaiting())));
