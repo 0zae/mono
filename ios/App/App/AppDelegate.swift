@@ -126,8 +126,9 @@ enum MonoPending {
 
     static func notify(id: String, text: String) {
         let c = UNMutableNotificationContent()
-        c.title = "Mono"
-        c.body = "\(summary(text)) 결제를 가계부에 기록할까요?"
+        // 제목만 봐도 어떤 결제인지: "현대카드 · 5,800원" / 내용: "가계부에 기록할까요?" (앱 이름 Mono는 iOS가 위에 붙여 줌)
+        c.title = summary(text)
+        c.body = "가계부에 기록할까요?"
         c.sound = .default
         c.categoryIdentifier = category
         c.userInfo = ["monoId": id]

@@ -154,10 +154,16 @@ function preview(){
   if(!draft){ under.innerHTML=""; return; }
   const c = draft.cat || "카테고리 자동";
   const pm = draft.method ? `<span class="sep">·</span><span class="tag" style="${draft.methodGuessed?"":"color:var(--label)"}">${esc(draft.method.name)}${draft.unregistered?" (미등록)":""}</span>` : "";
+  // 비어 있다가 처음 뜰 때만 조각별로 차례차례 (타자 칠 때마다 다시 움직이지 않게)
+  const entering = !under.firstChild;
   under.innerHTML =
     `<span class="amt num ${draft.type}">${draft.amount ? (draft.type==="in"?"+":"")+won(draft.amount)+"원" : "금액?"}</span><span class="sep">·</span>`+
     `<span class="tag"><span class="dot" style="background:${draft.cat?color(draft.cat):"var(--label3)"}"></span>${esc(c)}</span>${pm}<span class="sep">·</span>`+
     `<span>${dayLabel(draft.date)}</span><span class="sep">·</span><span>${esc(draft.memo)}</span>`;
+  if(entering){
+    [...under.children].forEach((el,i)=>el.style.animationDelay=`${i*.035}s`);
+    under.classList.remove("enter"); void under.offsetWidth; under.classList.add("enter");
+  }
 }
 q.addEventListener("input", ()=>{ lastAdded=null; preview(); });
 // 첫 화면의 빈 곳을 누르면 키보드 내리기
@@ -320,7 +326,7 @@ function runSplash(){
     set("spMM","transform",`translate(${118.44*(1-p)} 0)`); set("spMN","transform",`translate(${-6.93*(1-p)} 0)`);
     // 2) n 아래 홈이 위에서 아래로 열린다 (0.9~1.25초)
     set("spSlotRect","y", 170 + 32*(reduce ? 1 : out(clamp((t-900)/350))));
-    // 3) 기록을 다 불러왔고 최소 1.5초가 지나면(늦어도 3초) 왼쪽 위 로고 자리로 줄어든다
+    // 3) 기록을 다 불러왔고 최소 1.5초가 지나면(늦어도 3초) 검색창 위 로고 자리로 줄어든다
     if(shrinkAt===null && ((appReady && logoImg.getBoundingClientRect().width>0 && t>=1500) || t>=3000)) shrinkAt = t;
     if(shrinkAt!==null){
       const dur = reduce ? 200 : 600, q = out(clamp((t-shrinkAt)/dur));
@@ -723,13 +729,23 @@ function showAS(html){
   let primary=(main.tagName==="FORM" && btns.find(b=>b.getAttribute("type")==="submit")) || null;
   let others=btns.filter(b=>b!==primary);
   if(!primary && others.length===1 && main.querySelectorAll("input,textarea,.chips").length===0){ primary=others[0]; others=[]; }
+  // 삭제(빨간 동작)는 늘 아래 알약 줄 왼쪽에 연한 알약으로: [삭제] [저장]
+  const softDanger = others.find(b=>b.classList.contains("red")) || null;
+  others = others.filter(b=>b!==softDanger);
   if(others.length){
     const extra=document.createElement("div"); extra.className="pop-extra";
     others.forEach(b=>{ b.className = b.classList.contains("red") ? "red" : ""; extra.appendChild(b); });
     main.appendChild(extra);
   }
+  // 닫기/취소는 오른쪽 위 ✕로 (원래 버튼은 숨겨 두고 그 동작을 그대로 씀)
+  const x=document.createElement("button"); x.type="button"; x.className="pop-x"; x.setAttribute("aria-label", cancel?.textContent || "닫기");
+  x.innerHTML='<svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M1.5 1.5l7 7M8.5 1.5l-7 7" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';
+  x.onclick=()=> cancel ? cancel.click() : closeAS();
+  main.style.position="relative"; main.appendChild(x);
+  if(cancel){ cancel.type="button"; cancel.hidden=true; main.appendChild(cancel); }
+  // 아래에는 주요 버튼 하나만 알약으로
   const foot=document.createElement("div"); foot.className="pop-foot";
-  if(cancel){ cancel.className=""; cancel.type="button"; foot.appendChild(cancel); }
+  if(softDanger){ softDanger.className="danger-soft"; foot.appendChild(softDanger); }
   if(primary){ primary.className="primary"+(primary.classList.contains("red")?" red":""); foot.appendChild(primary); }
   main.appendChild(foot);
   last?.remove();
@@ -768,11 +784,13 @@ function openMethod(mid){
   const as = showAS(`<form class="g" id="mForm"><div class="h">${isNew?"결제수단 추가":"결제수단 편집"}</div>
     <div class="fields"><input id="mName" placeholder="이름 (예: 현대카드)" aria-label="이름"><input id="mAlias" placeholder="별칭, 쉼표로 구분 (예: 현대, 더블레드)" aria-label="별칭"></div>
     <div class="kinds" role="radiogroup" aria-label="종류">${PAY_KINDS.map(([k,l])=>`<button type="button" role="radio" data-kind="${k}" aria-label="${l}" title="${l}">${payGlyph(k)}</button>`).join("")}</div>
+    <label class="sw-row" for="mDefSw"><span>기본 결제수단</span><input type="checkbox" id="mDefSw" role="switch"><span class="tg"></span></label>
     <button class="btn b" type="submit">저장</button>
-    ${!isNew && m.id!==S.def?`<button class="btn" type="button" id="mDef">기본 수단으로 지정</button>`:""}
     ${!isNew && S.methods.length>1?`<button class="btn red" type="button" id="mDel">삭제</button>`:""}
   </form><div class="g"><button class="btn b" id="mCancel" type="button">취소</button></div>`);
   $("mName").value=m.name; $("mAlias").value=m.alias.join(", ");
+  const defSw=$("mDefSw"); defSw.checked = !isNew && m.id===S.def;
+  if(S.methods.length<=1 && !isNew) defSw.disabled = true; // 하나뿐이면 늘 기본
   // 종류: 직접 고르기 전까지는 이름으로 짐작해서 표시
   let kind = m.kind || (isNew ? "card" : guessKind(m.name)), kindPicked = !!m.kind;
   const paintKind = ()=>as.querySelectorAll("[data-kind]").forEach(b=>{ b.classList.toggle("sel", b.dataset.kind===kind); b.setAttribute("aria-checked", b.dataset.kind===kind); });
@@ -785,9 +803,11 @@ function openMethod(mid){
     const name=$("mName").value.trim(); if(!name){ $("mName").focus(); return; }
     m.name=name; m.alias=$("mAlias").value.split(",").map(s=>s.trim()).filter(Boolean); m.kind=kind;
     if(isNew) S.methods.push(m);
+    // 스위치: 켜면 기본으로, 기본이던 걸 끄면 다른 첫 수단이 기본
+    if(defSw.checked) S.def=m.id;
+    else if(S.def===m.id) S.def=(S.methods.find(v=>v.id!==m.id)||m).id;
     saveSettings(); closeAS(); renderSheet();
   };
-  const d=$("mDef"); if(d) d.onclick=()=>{ S.def=m.id; saveSettings(); closeAS(); renderSheet(); };
   const x=$("mDel"); if(x) x.onclick=()=>{ S.methods=S.methods.filter(v=>v.id!==m.id); if(S.def===m.id) S.def=S.methods[0].id; saveSettings(); closeAS(); renderSheet(); };
   $("mCancel").onclick=closeAS;
 }
@@ -803,7 +823,7 @@ function openCat(cid){
     <textarea id="cKeys" placeholder="키워드, 쉼표로 구분 (예: 사료, 동물병원, 간식)" aria-label="키워드"></textarea></div>
     <div class="swatches">${COLORS.map(k=>`<button type="button" data-col="${k}" aria-label="${COLOR_NAMES[k]||k}" class="${k===pick?"sel":""}" style="background:var(--k-${k})"></button>`).join("")}<label id="cSpec" aria-label="직접 고르기"><i></i><input type="color" id="cCustom"></label></div>
     <button class="btn b" type="submit">저장</button>
-    ${!isNew && c.name!==FALLBACK?`<button class="btn red" type="button" id="cDel">삭제${used?` (내역 ${used}건은 ${FALLBACK}로)`:""}</button>`:""}
+    ${!isNew && c.name!==FALLBACK?`<button class="btn red" type="button" id="cDel">삭제</button>`:""}
   </form><div class="g"><button class="btn b" id="cCancel" type="button">취소</button></div>`);
   $("cName").value=c.name; $("cKeys").value=c.keys.join(", ");
   if(c.name===FALLBACK) $("cName").disabled=true;
@@ -852,10 +872,12 @@ function openRec(rid){
     <div class="sub">카테고리</div><div class="chips" id="rCats">${S.cats.map(c=>`<button type="button" data-rc="${esc(c.name)}"><i style="background:${color(c.name)}"></i>${esc(c.name)}</button>`).join("")}</div>
     <div class="sub">결제수단</div><div class="chips" id="rPays">${S.methods.map(m=>`<button type="button" data-rp="${esc(m.id)}"></button>`).join("")}</div>
     <div class="hint-line" id="rHint"></div>
+    <label class="sw-row" for="rOnSw"><span>자동 기록</span><input type="checkbox" id="rOnSw" role="switch"><span class="tg"></span></label>
     <button class="btn b" type="submit">저장</button>
-    ${!isNew?`<button class="btn" type="button" id="rPause">${r.paused?"다시 시작":"일시정지"}</button><button class="btn red" type="button" id="rDel">삭제</button>`:""}
+    ${!isNew?`<button class="btn red" type="button" id="rDel">삭제</button>`:""}
   </form><div class="g"><button class="btn b" id="rCancel" type="button">취소</button></div>`);
   $("rName").value=r.name; $("rAmt").value=r.amount?won(r.amount):""; $("rDay").value=r.day;
+  $("rOnSw").checked = !r.paused;
   as.querySelectorAll("[data-rp]").forEach(b=>b.textContent=methodById(b.dataset.rp).name);
   const paint=()=>{
     as.querySelectorAll("[data-rc]").forEach(b=>{ const on=b.dataset.rc===cat; b.classList.toggle("sel",on); b.querySelector("i").style.background=on?"#fff":color(b.dataset.rc); });
@@ -877,12 +899,11 @@ function openRec(rid){
     if(!name) return $("rName").focus();
     if(!(amount>0)) return $("rAmt").focus();
     if(!(day>=1 && day<=31)) return $("rDay").focus();
-    Object.assign(r,{name,amount,day,cat:cat||FALLBACK,p:pay});
+    Object.assign(r,{name,amount,day,cat:cat||FALLBACK,p:pay,paused:!$("rOnSw").checked});
     if(isNew) S.recurring.push(r);
     await saveSettings(); await load();
     closeAS(); renderSheet();
   };
-  const pz=$("rPause"); if(pz) pz.onclick=async()=>{ r.paused=!r.paused; await saveSettings(); closeAS(); renderSheet(); };
   const del=$("rDel"); if(del) del.onclick=async()=>{ S.recurring=S.recurring.filter(x=>x!==r); await saveSettings(); closeAS(); renderSheet(); };
   $("rCancel").onclick=closeAS;
 }
@@ -926,8 +947,6 @@ window.addEventListener("orientationchange", ()=>setTimeout(()=>{ homeH = window
 boot().then(()=>{ appReady = true; });
 runSplash();
 
-// 키보드가 올라와도 로고는 화면 맨 위에: iOS가 화면을 밀어 올린 만큼(visualViewport.offsetTop) 되돌린다
-const logo = document.querySelector(".logo");
 const setKb = kb=>{
   // 키보드 높이: '내역 보기', 아래에서 올라오는 시트, 설정 목록을 그만큼 위로
   document.documentElement.style.setProperty("--kb", kb+"px");
@@ -940,11 +959,10 @@ if(KB){
   KB.addListener("keyboardWillShow", info=>setKb(info.keyboardHeight||0));
   KB.addListener("keyboardWillHide", ()=>setKb(0));
 }
-// 웹: iOS Safari가 화면을 밀어 올린 만큼 로고를 되돌리고, 키보드 높이는 visualViewport로
+// 웹: 키보드 높이는 visualViewport로
 const pinLogo = ()=>{
   if(KB) return;
   const vv = window.visualViewport;
-  logo.style.transform = vv && vv.offsetTop ? `translateY(${vv.offsetTop}px)` : "";
   setKb(vv ? Math.max(0, window.innerHeight - vv.height - vv.offsetTop) : 0);
 };
 window.addEventListener("resize", pinLogo);
