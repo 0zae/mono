@@ -52,10 +52,11 @@ body{margin:0}
 /* Gemini 안내: 검색창 아래, 입력 미리보기가 뜨면 그 자리를 비켜 준다 */
 .below{position:relative}
 /* 안내와 미리보기는 같은 높이(44px, 위 10px)의 줄에서 가운데 맞춤 → 서로 엇갈려 페이드 */
-.ai{position:absolute;left:0;right:0;top:0;height:44px;padding-top:10px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--label3);pointer-events:none;transition:opacity .2s}
-.below:has(.under:not(:empty)) .ai{opacity:0}
-.under.enter > *{animation:piece .34s cubic-bezier(.3,.8,.3,1) both}
-@keyframes piece{from{opacity:0;transform:translateY(6px)}}
+.ai{position:absolute;left:0;right:0;top:0;height:44px;padding-top:10px;display:flex;align-items:center;justify-content:center;font-size:12px;color:var(--label3);pointer-events:none;transition:opacity .28s,transform .32s cubic-bezier(.3,.8,.3,1)}
+.below:has(.under:not(:empty)) .ai{opacity:0;transform:translateY(-10px)}
+/* A: 안내는 위로 빠지고, 미리보기는 아래에서 살짝 올라온다 */
+.under.enter{animation:rise .32s cubic-bezier(.3,.8,.3,1) both}
+@keyframes rise{from{opacity:0;transform:translateY(10px)}}
 html,body{height:100%;overflow:hidden;overscroll-behavior:none}
 body{background:var(--home);color:var(--label);font-family:-apple-system,BlinkMacSystemFont,"SF Pro Text","Apple SD Gothic Neo","Pretendard","Malgun Gothic",system-ui,sans-serif;font-size:17px;line-height:1.3;letter-spacing:-.01em;-webkit-font-smoothing:antialiased}
 button,input{font:inherit;color:inherit;letter-spacing:inherit}
@@ -188,6 +189,7 @@ h2.sec{font-size:22px;line-height:28px;font-weight:700;letter-spacing:.01em;marg
 .cell .r.in{color:var(--green)}
 .empty{text-align:center;color:var(--label2);font-size:15px;padding:40px 16px}
 .edit{border:0;background:none;color:var(--accent);font-size:13px;padding:0}
+.cell .ck{color:var(--accent);flex:none}
 
 /* ---------- action sheet ---------- */
 /* 가운데 작은 팝업 */
@@ -216,6 +218,35 @@ h2.sec{font-size:22px;line-height:28px;font-weight:700;letter-spacing:.01em;marg
 .as .fields .day-row input{width:64px;text-align:center}
 .as .hint-line{font-size:12px;color:var(--label2);text-align:left;padding:0 18px 10px;min-height:1px}
 /* 부가 동작(기본 지정·삭제 등): 작은 글자 버튼 */
+/* 단축어 연결 안내 (단계별) */
+.cell small .linked{color:var(--green);font-weight:600}
+.gd-dots{display:flex;gap:5px;padding:0 18px 12px}
+.gd-dots i{flex:1;height:4px;border-radius:2px;background:var(--fill);transition:background .25s}
+.gd-dots i.on{background:var(--accent)}
+.gd-step{padding:0 18px 4px}
+.gd-step.inR{animation:gdR .32s cubic-bezier(.3,.8,.3,1)}.gd-step.inL{animation:gdL .32s cubic-bezier(.3,.8,.3,1)}
+@keyframes gdR{from{opacity:0;transform:translateX(24px)}}@keyframes gdL{from{opacity:0;transform:translateX(-24px)}}
+.gd-t{font-size:16px;font-weight:600;margin:14px 0 4px}
+.gd-d{font-size:14px;line-height:1.45;color:var(--label2)}
+.gd-open{display:block;margin:0 auto 14px;border:0;background:none;color:var(--accent);font-size:14px;padding:4px 8px}
+.gs{background:var(--fill);border-radius:16px;padding:10px;height:200px;overflow:hidden;font-size:12px;display:flex;flex-direction:column;gap:5px;position:relative}
+.gs-bar{display:flex;justify-content:space-between;align-items:center;font-weight:700;font-size:14px;min-height:24px;padding:0 2px 2px}
+.gs-plus{width:24px;height:24px;border-radius:50%;display:grid;place-items:center;color:var(--accent);font-weight:500;font-size:16px}
+.gs-next{color:var(--accent);font-weight:600;font-size:12px;padding:3px 8px;border-radius:8px}
+.gs-row{display:flex;align-items:center;gap:8px;background:var(--cell);border-radius:9px;min-height:24px;padding:0 9px;color:var(--label)}
+.gs-row em{margin-left:auto;font-style:normal;color:var(--label2)}
+.gs-row em.ck{color:var(--accent);font-weight:700}
+.gs-ic{display:grid;place-items:center;min-width:14px}
+.gs-tile{display:block;width:14px;height:14px;border-radius:4px}
+.gs-mono{display:inline-grid;place-items:center;width:16px;height:16px;border-radius:4px;background:var(--accent);color:#fff;font-size:10px;font-weight:800}
+.gs-empty{flex:1;display:grid;place-items:center;color:var(--label3);font-size:12px}
+.gs-tabs{display:flex;justify-content:space-around;font-size:11px;color:var(--label2);padding-top:4px}
+.gs-tabs .on{color:var(--accent);font-weight:600;padding:2px 8px;border-radius:8px}
+.gs-search{background:var(--cell);border-radius:9px;height:26px;display:flex;align-items:center;padding:0 9px;color:var(--label)}
+.gs-act{display:flex;gap:8px;align-items:center;background:var(--cell);border-radius:12px;padding:12px 10px;margin-top:6px;line-height:1.6}
+.gs-tok{font-style:normal;background:color-mix(in srgb,var(--accent) 16%,transparent);color:var(--accent);border-radius:6px;padding:1px 6px;font-weight:600}
+.gs .hl{box-shadow:0 0 0 2px var(--accent);animation:hl 1.6s ease-in-out infinite}
+@keyframes hl{50%{box-shadow:0 0 0 2px var(--accent),0 0 0 6px color-mix(in srgb,var(--accent) 20%,transparent)}}
 .as .guide{list-style:none;margin:0;padding:0 18px 14px;font-size:14px;line-height:1.45;color:var(--label);counter-reset:g;display:flex;flex-direction:column;gap:10px}
 .as .guide li{display:flex;gap:10px;counter-increment:g}
 .as .guide li::before{content:counter(g);flex:none;width:20px;height:20px;border-radius:50%;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);font-size:11px;font-weight:700;display:grid;place-items:center;margin-top:1px}
@@ -248,12 +279,18 @@ h2.sec{font-size:22px;line-height:28px;font-weight:700;letter-spacing:.01em;marg
 .foot-note a{color:var(--accent);text-decoration:none}
 .foot-note{font-size:13px;color:var(--label2);padding:0 16px;margin:-16px 0 24px;line-height:18px}
 .scrim2{z-index:2}
+/* 내역을 올리면 로고가 작아지며 위쪽 가운데로 (흐린 막 위, 시트 아래) */
+.fly-logo{position:fixed;left:0;top:0;height:auto;transform-origin:0 0;pointer-events:none;opacity:0;transition:transform .6s cubic-bezier(.3,1.5,.45,1)} /* 쫀득: 살짝 지나쳤다 돌아오는 스프링 */
+.fly-logo.on{opacity:1}
 
 .budget-in{width:100%;border:0;background:var(--fill);border-radius:12px;height:44px;padding:0 12px;font-size:17px;outline:none}
 @media (prefers-reduced-motion:reduce){*{transition:none!important}}
 </style>
+<link rel="stylesheet" href="./glass.css">
+<script>/* 테마는 첫 그림 전에: 깜빡임 없이 */try{var k=localStorage.getItem("mono-skin");if(k&&k!=="default")document.documentElement.dataset.skin=k}catch(e){}</script>
 </head>
 <body>
+<canvas class="wall" id="wall" aria-hidden="true"></canvas>
 <!-- 시작 화면: 주황 바탕의 mn → o가 빠져나와 mono → 왼쪽 위 로고로 줄어들며 앱 시작 (첫 화면부터 보이도록 HTML에 바로) -->
 <div class="splash" id="splash" aria-hidden="true">
   <svg id="splashSvg" viewBox="0 0 615.97 254.52">
@@ -298,6 +335,7 @@ h2.sec{font-size:22px;line-height:28px;font-weight:700;letter-spacing:.01em;marg
 </main>
 
 <div class="scrim" id="scrim"></div>
+<img class="fly-logo" id="flyLogo" src="./logo.svg" alt="" aria-hidden="true">
 <section class="sheet" id="sheet" role="dialog" aria-modal="true" aria-label="이번 달 내역">
   <div class="grab"></div>
   <div class="bar">

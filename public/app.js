@@ -119,11 +119,74 @@ function items(ym){ return (ym ? (S.months[ym]||[]) : Object.values(S.months).fl
 // 모든 기록은 이 기기 안(local.js)에 저장한다
 const api = (method, path, body) => localApi(method, path, body ? JSON.parse(JSON.stringify(body)) : undefined);
 const fail = () => flash("저장하지 못했어요. 브라우저 저장 공간을 확인해 주세요.");
-const saveSettings = (extra) => api("PUT","settings",{budget:S.budget, methods:S.methods, def:S.def, cats:S.cats, recurring:S.recurring, ...extra}).catch(fail);
+const saveSettings = (extra) => api("PUT","settings",{budget:S.budget, methods:S.methods, def:S.def, cats:S.cats, recurring:S.recurring, skin:S.skin, links:S.links, ...extra}).catch(fail);
+// 테마(default / liquid): <html data-skin>으로 켜고, 다음 실행 때 바로 칠하도록 localStorage에도
+const SKINS=[["default","default"],["liquid","liquid"]];
+function applySkin(k){
+  S.skin = SKINS.some(s=>s[0]===k) ? k : "default";
+  if(S.skin==="default") delete document.documentElement.dataset.skin; else document.documentElement.dataset.skin=S.skin;
+  try{ localStorage.setItem("mono-skin", S.skin); }catch(e){}
+  wall(S.skin==="liquid");
+}
+// liquid 배경: 뿌연 원들이 천천히 떠다니며 서로·벽에 부딪혀 튕긴다 (저해상도 캔버스라 가볍고 저절로 흐릿)
+const wall = (()=>{
+  const cv = document.getElementById("wall"), ctx = cv.getContext("2d"), K = .25; // 1/4 해상도
+  const dark = matchMedia("(prefers-color-scheme: dark)"), still = matchMedia("(prefers-reduced-motion: reduce)");
+  const LIGHT = ["#F2CFC1","#F3DFCB","#E9D3DD","#F0C4B4","#DDD6EA"], DARK = ["#4A2A20","#3A2632","#55301F","#2E2A3A","#40261D"];
+  let on=false, raf=0, last=0, W=0, H=0, balls=[];
+  const size = ()=>{ W=innerWidth; H=innerHeight; cv.width=Math.ceil(W*K); cv.height=Math.ceil(H*K); };
+  const seed = ()=>{
+    const m=Math.min(W,H);
+    balls = [.62,.5,.56,.44,.4].map((r,i)=>{ const a=Math.random()*Math.PI*2, sp=14+Math.random()*12;
+      return { r:m*r, x:Math.random()*W, y:Math.random()*H, vx:Math.cos(a)*sp, vy:Math.sin(a)*sp, c:i }; });
+  };
+  const step = dt=>{
+    for(const b of balls){
+      b.x+=b.vx*dt; b.y+=b.vy*dt;
+      const e=b.r*.35; // 원의 가운데 부분이 화면 밖으로 너무 나가지 않게
+      if(b.x<-e&&b.vx<0||b.x>W+e&&b.vx>0) b.vx*=-1;
+      if(b.y<-e&&b.vy<0||b.y>H+e&&b.vy>0) b.vy*=-1;
+    }
+    // 서로 부딪히기: 보이는 크기의 절반쯤에서 탄성 충돌 (같은 무게)
+    for(let i=0;i<balls.length;i++) for(let j=i+1;j<balls.length;j++){
+      const a=balls[i], b=balls[j], dx=b.x-a.x, dy=b.y-a.y, d=Math.hypot(dx,dy)||1, min=(a.r+b.r)*.45;
+      if(d>=min) continue;
+      const nx=dx/d, ny=dy/d, rel=(b.vx-a.vx)*nx+(b.vy-a.vy)*ny;
+      if(rel<0){ a.vx+=rel*nx; a.vy+=rel*ny; b.vx-=rel*nx; b.vy-=rel*ny; }
+      const push=(min-d)/2; a.x-=nx*push; a.y-=ny*push; b.x+=nx*push; b.y+=ny*push;
+    }
+  };
+  const draw = ()=>{
+    const pal = dark.matches ? DARK : LIGHT, al = dark.matches ? .8 : .75;
+    ctx.clearRect(0,0,cv.width,cv.height);
+    for(const b of balls){
+      const x=b.x*K, y=b.y*K, r=b.r*K, g=ctx.createRadialGradient(x,y,0,x,y,r);
+      g.addColorStop(0, pal[b.c]); g.addColorStop(1, pal[b.c]+"00");
+      ctx.globalAlpha=al; ctx.fillStyle=g; ctx.fillRect(x-r,y-r,r*2,r*2);
+    }
+    ctx.globalAlpha=1;
+  };
+  const tick = t=>{ // 약 30fps로만 다시 그린다
+    if(!on) return;
+    if(t-last >= 32){ step(Math.min(.1,(t-last)/1000)); last=t; draw(); }
+    raf=requestAnimationFrame(tick);
+  };
+  addEventListener("resize", ()=>{ if(on){ size(); draw(); } });
+  document.addEventListener("visibilitychange", ()=>{ if(!on) return; cancelAnimationFrame(raf); if(document.visibilityState==="visible" && !still.matches){ last=performance.now(); raf=requestAnimationFrame(tick); } });
+  dark.addEventListener?.("change", ()=>on&&draw());
+  return go=>{
+    if(go===on) return; on=go; cancelAnimationFrame(raf);
+    if(!on) return;
+    size(); if(!balls.length) seed(); draw();
+    if(!still.matches){ last=performance.now(); raf=requestAnimationFrame(tick); }
+  };
+})();
 function applySettings(v){
   if(typeof v.budget==="number") S.budget=v.budget;
   if(Array.isArray(v.methods)) S.methods=v.methods.map(m=>({id:m.id,name:m.name,alias:Array.isArray(m.alias)?m.alias.slice():[]}));
   if(typeof v.def==="string") S.def=v.def;
+  if(typeof v.skin==="string") applySkin(v.skin);
+  if(v.links && typeof v.links==="object") S.links={pay:+v.links.pay||0, sms:+v.links.sms||0};
   if(Array.isArray(v.recurring)) S.recurring=v.recurring.map(r=>({...r}));
   if(Array.isArray(v.cats) && v.cats.length) S.cats=v.cats.map(c=>({id:c.id,name:c.name,color:c.color||"gray",keys:Array.isArray(c.keys)?c.keys.slice():[]}));
 }
@@ -154,16 +217,15 @@ function preview(){
   if(!draft){ under.innerHTML=""; return; }
   const c = draft.cat || "카테고리 자동";
   const pm = draft.method ? `<span class="sep">·</span><span class="tag" style="${draft.methodGuessed?"":"color:var(--label)"}">${esc(draft.method.name)}${draft.unregistered?" (미등록)":""}</span>` : "";
-  // 비어 있다가 처음 뜰 때만 조각별로 차례차례 (타자 칠 때마다 다시 움직이지 않게)
+  // 비어 있다가 처음 뜰 때만 움직인다 (타자 칠 때마다 다시 움직이지 않게)
   const entering = !under.firstChild;
   under.innerHTML =
     `<span class="amt num ${draft.type}">${draft.amount ? (draft.type==="in"?"+":"")+won(draft.amount)+"원" : "금액?"}</span><span class="sep">·</span>`+
     `<span class="tag"><span class="dot" style="background:${draft.cat?color(draft.cat):"var(--label3)"}"></span>${esc(c)}</span>${pm}<span class="sep">·</span>`+
     `<span>${dayLabel(draft.date)}</span><span class="sep">·</span><span>${esc(draft.memo)}</span>`;
-  if(entering){
-    [...under.children].forEach((el,i)=>el.style.animationDelay=`${i*.035}s`);
-    under.classList.remove("enter"); void under.offsetWidth; under.classList.add("enter");
-  }
+  // 처음 뜰 때만 아래에서 살짝 올라오고, 이후 글자를 칠 때는 제자리에서 글자만 바뀐다
+  if(entering){ under.classList.remove("enter"); void under.offsetWidth; under.classList.add("enter"); }
+  else under.classList.remove("enter");
 }
 q.addEventListener("input", ()=>{ lastAdded=null; preview(); });
 // 첫 화면의 빈 곳을 누르면 키보드 내리기
@@ -270,6 +332,7 @@ async function syncPending(){
     const q = await readPending(P);
     if(!q.length) return;
     const handled = new Set(q.map(x=>x.id));
+    noteLinks(q);
     const added = [];
     for(const x of q.filter(x=>x.status==="approved")){
       const it = await recordParsed(await api("POST","payment/parse",{text:x.text}), x);
@@ -284,6 +347,17 @@ async function syncPending(){
     else if(added.length>1) flash(`결제 알림에서 ${added.length}건 기록했어요.`);
     if(ask.length) askPayments(ask);
   } finally { syncing = false; }
+}
+// 문자인지 애플페이인지 대강 가려서 마지막으로 들어온 때를 남긴다 (설정에 '연결됨' 표시용)
+function noteLinks(q){
+  S.links = S.links || {pay:0, sms:0};
+  let changed=false;
+  for(const x of q){
+    const k = /승인|Web발신|일시불|할부|누적|잔액|\[.*카드\]/.test(x.text) ? "sms" : "pay";
+    const t = x.ts || Date.now();
+    if(t > (S.links[k]||0)){ S.links[k]=t; changed=true; }
+  }
+  if(changed) saveSettings();
 }
 // 알림에 답하지 않은 결제: 앱 안에서 한 건씩 묻기
 async function askPayments(list){
@@ -400,9 +474,33 @@ let txMode = "list"; // 내역은 목록이 기본, 달력은 아이콘을 눌�
 function openSheet(v){
   q.blur(); window.scrollTo(0,0); txOpen=false; selDay=null; txMode="list"; filter=null; sheetOpen=true; view=v||"list"; S.view=THIS_YM; renderSheet();
   $("scroll").scrollTop = 0;
-  requestAnimationFrame(()=>{ $("scrim").classList.add("on"); $("sheet").classList.add("on"); });
+  requestAnimationFrame(()=>{ $("scrim").classList.add("on"); $("sheet").classList.add("on"); flyLogo(true); });
 }
-function closeSheet(){ sheetOpen=false; editingBudget=false; $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); closeAS(); q.focus(); }
+function closeSheet(){ sheetOpen=false; editingBudget=false; $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); flyLogo(false); closeAS(); q.focus(); }
+// 로고: 시트가 올라오면 작아지며 시트 위 빈 곳 가운데로, 내려가면 제자리로
+let flyTimer=null, flyGeo=null;
+const flyAt=(p)=>{ // p: 0=위쪽 가운데, 1=제자리
+  const {a,b}=flyGeo, k=v=>a[v]+(b[v]-a[v])*p;
+  return `translate(${k("x")}px, ${k("y")}px) scale(${k("s")})`;
+};
+function flyLogo(open){
+  const real=document.querySelector(".logo img"), fl=$("flyLogo");
+  clearTimeout(flyTimer);
+  if(open){
+    const r=real.getBoundingClientRect(); if(!r.width) return;
+    const sheetTop=parseFloat(getComputedStyle($("sheet")).top)||57, h=20, s=h/r.height, w=r.width*s;
+    flyGeo={ a:{x:(innerWidth-w)/2, y:sheetTop-28.5-h/2, s}, b:{x:r.left, y:r.top, s:1} };
+    fl.style.width=r.width+"px"; fl.style.transition="none"; fl.style.transform=flyAt(1);
+    fl.classList.add("on"); real.style.visibility="hidden"; void fl.offsetWidth;
+    fl.style.transition=""; fl.style.transform=flyAt(0);
+  }else{
+    if(!fl.classList.contains("on") || !flyGeo) return;
+    fl.style.transition=""; fl.style.transform=flyAt(1);
+    flyTimer=setTimeout(()=>{ real.style.visibility=""; fl.classList.remove("on"); }, 620);
+  }
+}
+// 시트를 끌어내리는 동안 로고도 손가락을 따라 내려온다
+function flyDrag(p){ const fl=$("flyLogo"); if(!flyGeo || !fl.classList.contains("on")) return; fl.style.transition = p===null ? "" : "none"; fl.style.transform = flyAt(p===null ? 0 : p); }
 $("open").onclick=()=>openSheet();
 {
   const sheet = $("sheet"), scrim = $("scrim");
@@ -418,6 +516,7 @@ $("open").onclick=()=>openSheet();
     drag.dy = Math.max(0, e.clientY - drag.y);
     sheet.style.transform = `translateY(${drag.dy}px)`;
     scrim.style.opacity = String(Math.max(0, 1 - drag.dy / sheet.offsetHeight));
+    flyDrag(Math.min(1, drag.dy / sheet.offsetHeight));
   };
   const end = ()=>{
     if(!drag) return;
@@ -426,7 +525,7 @@ $("open").onclick=()=>openSheet();
     drag = null;
     sheet.style.transition = ""; scrim.style.transition = "";
     sheet.style.transform = ""; scrim.style.opacity = "";
-    if(close) closeSheet();
+    if(close) closeSheet(); else flyDrag(null);
   };
   for(const el of [sheet.querySelector(".grab"), sheet.querySelector(".bar")]){
     el.addEventListener("pointerdown", start);
@@ -626,8 +725,7 @@ function renderSettings(){
   // 결제 알림 자동 기록 (단축어 연결 안내)
   const native = !!window.Capacitor?.isNativePlatform?.();
   h += `<div class="cap"><span>결제 알림 자동 기록</span></div><div class="group">
-    <button class="cell" data-guide="pay"><span class="t"><span>애플페이 연결하기</span></span><span class="r">${CHEV}</span></button>
-    <button class="cell" data-guide="sms"><span class="t"><span>카드 문자 연결하기</span></span><span class="r">${CHEV}</span></button></div>
+    ${[["pay","애플페이"],["sms","카드 문자"]].map(([k,n])=>{ const t=S.links?.[k]; return `<button class="cell" data-guide="${k}"><span class="t"><span>${t?n:n+" 연결하기"}</span><small>${t?`<span class="linked">연결됨</span> · 마지막 기록 ${linkWhen(t)}`:"아직 연결 안 됨"}</small></span><span class="r">${CHEV}</span></button>`; }).join("")}</div>
     <p class="foot-note">${native ? "결제하면 \"기록할까요?\" 알림이 와요. [기록]을 누르면 Mono가 열리며 바로 기록돼요. 카드사 앱 알림은 iOS가 막아 두어서, 스크린샷을 카메라 버튼으로 읽어 주세요." : "아이폰 앱(Mono)에서만 쓸 수 있어요."}</p>`;
   const recTotal = S.recurring.filter(r=>!r.paused).reduce((a,r)=>a+r.amount,0);
   h += `<div class="cap"><span>정기 결제</span><span class="num">${S.recurring.length?"매월 "+won(recTotal)+"원":""}</span></div><div class="group">`+
@@ -641,6 +739,9 @@ function renderSettings(){
   h += `<p class="foot-note">키워드가 들어 있는 입력은 바로 그 카테고리로 들어가요. 키워드에 없는 상호는 Gemini가 이 카테고리 중에서 골라요.</p>`;
   h += `<div class="cap"><span>Gemini</span></div><div class="group"><form class="cell" id="gForm"><span class="t"><input class="inline" id="gKey" type="password" autocomplete="off" spellcheck="false" placeholder="API 키 붙여넣기" aria-label="Gemini API 키"></span><button class="edit" type="submit">저장</button></form></div>
     <p class="foot-note" id="gNote">키는 이 기기 안에만 저장되고 백업 파일에도 들어가지 않아요. <a href="https://aistudio.google.com/apikey" target="_blank" rel="noopener">키 발급받기</a></p>`;
+  const CK = `<svg class="ck" width="16" height="13" viewBox="0 0 16 13" aria-hidden="true"><path d="M1.5 7 6 11.2 14.5 1.8" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+  h += `<div class="cap"><span>테마</span></div><div class="group" role="radiogroup" aria-label="테마">`+
+    SKINS.map(([k,n])=>`<button class="cell" data-skin="${k}" role="radio" aria-checked="${S.skin===k}"><span class="t"><span>${n}</span></span>${S.skin===k?CK:""}</button>`).join("")+`</div>`;
   h += `<div class="cap"><span>백업</span></div><div class="group">
     <button class="cell" id="exp"><span class="t"><span style="color:var(--accent)">백업 파일 내보내기</span></span></button>
     <label class="cell" for="impFile"><span class="t"><span style="color:var(--accent)">백업 파일에서 가져오기</span></span></label></div>
@@ -648,6 +749,7 @@ function renderSettings(){
     <p class="foot-note">기록은 이 기기 안에만 있어요. 홈 화면 아이콘을 지우면 기록도 지워지니 가끔 내보내기로 백업해 두세요.</p>`;
   $("scroll").innerHTML = h;
   setupGemini(); setupBackup();
+  $("scroll").querySelectorAll("[data-skin]").forEach(b=>b.onclick=()=>{ applySkin(b.dataset.skin); saveSettings(); renderSheet(); });
   $("scroll").querySelectorAll("[data-m]").forEach(b=>{
     const m = methodById(b.dataset.m); if(!m) return;
     b.querySelector(".t span").textContent = m.name;
@@ -908,24 +1010,55 @@ function openRec(rid){
   $("rCancel").onclick=closeAS;
 }
 // 단축어 자동화 설정 안내
-function openGuide(kind){
-  const steps = kind==="pay" ? [
-    "단축어 앱 → 아래 '자동화' → 오른쪽 위 ＋",
-    "'월렛' 선택 → 연결할 카드 고르기 → '즉시 실행' → 다음",
-    "'새로운 빈 자동화' → 동작 추가에서 'Mono에 결제 보내기' 검색해서 추가",
-    "'결제 내용'을 누르고 변수에서 '가맹점', '금액', '카드 또는 패스'를 차례로 넣기 → 완료",
-  ] : [
-    "단축어 앱 → 아래 '자동화' → 오른쪽 위 ＋",
-    "'메시지' 선택 → '보낸 사람'에 카드사 번호를 고르거나, '메시지에 포함'에 '승인' 입력 → '즉시 실행' → 다음",
-    "'새로운 빈 자동화' → 동작 추가에서 'Mono에 결제 보내기' 검색해서 추가",
-    "'결제 내용'을 누르고 변수에서 '메시지'(단축어 입력) 넣기 → 완료",
+function linkWhen(t){
+  const d=new Date(t), p=n=>String(n).padStart(2,"0"), hm=`${p(d.getHours())}:${p(d.getMinutes())}`;
+  const ds=ymd(d), td=ymd(new Date());
+  return ds===td ? `오늘 ${hm}` : `${d.getMonth()+1}/${d.getDate()} ${hm}`;
+}
+// 단축어 연결 안내: 한 번에 한 단계, 실제 화면을 닮은 그림 위에 누를 곳 표시
+const GS = {
+  bar:(t,right="")=>`<div class="gs-bar"><span>${t}</span>${right}</div>`,
+  row:(ic,t,hl,extra="")=>`<div class="gs-row${hl?" hl":""}"><span class="gs-ic">${ic}</span><span>${t}</span>${extra}</div>`,
+  tabs:()=>`<div class="gs-tabs"><span>단축어</span><span class="on hl">자동화</span><span>갤러리</span></div>`,
+};
+const tile = c=>`<i class="gs-tile" style="background:${c}"></i>`; // 단축어 앱의 색 아이콘 자리
+const GI = { clock:tile("#5E5CE6"), alarm:tile("#FF9F0A"), mail:tile("#0A84FF"), msg:tile("#30D158"), wallet:tile("#1C1C1E"), mono:`<b class="gs-mono">m</b>` };
+function guideSteps(kind){
+  const pay = kind==="pay";
+  return [
+    { t:"단축어 앱에서 '자동화' → ＋", d:"아래 가운데 '자동화' 탭을 누르고, 오른쪽 위 ＋를 눌러 새 자동화를 만들어요.",
+      s:GS.bar("자동화",`<span class="gs-plus hl">＋</span>`)+`<div class="gs-empty">개인용 자동화</div>`+GS.tabs() },
+    { t: pay?"'월렛'을 고르세요":"'메시지'를 고르세요", d: pay?"목록을 조금 내리면 있어요.":"목록 위쪽에 있어요.",
+      s:GS.bar("새로운 자동화")+GS.row(GI.clock,"특정 시간",false)+GS.row(GI.alarm,"알람",false)+GS.row(GI.mail,"이메일",false)+GS.row(GI.msg,"메시지",!pay)+GS.row(GI.wallet,"월렛",pay) },
+    pay ? { t:"카드 고르고 '즉시 실행'", d:"연결할 카드를 고른 뒤 '즉시 실행'을 선택하고 오른쪽 위 '다음'.",
+      s:GS.bar("월렛",`<span class="gs-next hl">다음</span>`)+GS.row(GI.wallet,"카드 또는 패스",false,`<em>모두</em>`)+GS.row("","확인 후 실행",false)+GS.row("","즉시 실행",true,`<em class="ck">✓</em>`) }
+        : { t:"'승인'이 들어간 문자 + '즉시 실행'", d:"'메시지에 포함'에 승인을 넣고, '즉시 실행'을 선택한 뒤 오른쪽 위 '다음'.",
+      s:GS.bar("메시지",`<span class="gs-next hl">다음</span>`)+GS.row("","메시지에 포함",true,`<em>승인</em>`)+GS.row("","확인 후 실행",false)+GS.row("","즉시 실행",true,`<em class="ck">✓</em>`) },
+    { t:"'Mono' 검색해서 추가", d:"'새로운 빈 자동화'를 누르고, 동작 검색에 Mono를 입력해 'Mono에 결제 보내기'를 눌러요.",
+      s:GS.bar("새로운 빈 자동화")+`<div class="gs-search">⌕ Mono</div>`+GS.row(GI.mono,"Mono에 결제 보내기",true) },
+    { t:"확인하고 '완료'", d: pay ? "'단축어 입력'이 자동으로 들어가 있으면 바로 '완료'. 비어 있으면 눌러서 가맹점·금액·카드를 넣어 주세요." : "'단축어 입력'이 자동으로 들어가 있으면 바로 '완료'. 비어 있으면 눌러서 '단축어 입력'을 골라 주세요.",
+      s:GS.bar("",`<span class="gs-next hl">완료</span>`)+GS.row(pay?GI.wallet:GI.msg, pay?"월렛 거래가 있을 때":"'승인' 문자가 올 때",false,`<em>즉시 실행</em>`)+`<div class="gs-act">${GI.mono}<span><i class="gs-tok">단축어 입력</i>을 Mono로 보내기</span></div>` },
   ];
-  const as = showAS(`<div class="g"><div class="h">${kind==="pay"?"애플페이 연결하기":"카드 문자 연결하기"}</div>
-    <ol class="guide">${steps.map(t=>`<li></li>`).join("")}</ol>
-    <button class="btn b" id="gOpen">단축어 앱 열기</button></div><div class="g"><button class="btn b" id="gClose">닫기</button></div>`);
-  as.querySelectorAll(".guide li").forEach((li,k)=>li.textContent=steps[k]);
-  $("gOpen").onclick = ()=>{ location.href = "shortcuts://"; };
-  $("gClose").onclick = closeAS;
+}
+function openGuide(kind){
+  const steps = guideSteps(kind);
+  let i = 0, away = false;
+  const as = showAS(`<div class="g gd"><div class="h">${kind==="pay"?"애플페이 연결하기":"카드 문자 연결하기"}</div><div id="gdBody"></div></div><div class="g"><button class="btn b" id="gClose">닫기</button></div>`);
+  const draw = (dir=0)=>{
+    const st = steps[i], last = i===steps.length-1;
+    $("gdBody").innerHTML = `<div class="gd-dots">${steps.map((_,k)=>`<i class="${k<=i?"on":""}"></i>`).join("")}</div>
+      <div class="gd-step${dir?` in${dir>0?"R":"L"}`:""}"><div class="gs">${st.s}</div><div class="gd-t">${i+1}. ${st.t}</div><div class="gd-d">${st.d}</div></div>
+      <div class="pop-foot">${i?`<button type="button" id="gdPrev">이전</button>`:""}<button type="button" class="primary" id="gdNext">${last?"완료":"다음"}</button></div>
+      <button type="button" class="gd-open" id="gdOpen">단축어 앱 열기 ↗</button>`;
+    $("gdNext").onclick = ()=>{ if(last) return closeAS(); i++; draw(1); };
+    const pv=$("gdPrev"); if(pv) pv.onclick = ()=>{ i--; draw(-1); };
+    $("gdOpen").onclick = ()=>{ away = true; location.href = "shortcuts://"; };
+  };
+  draw();
+  // 단축어 앱에 다녀오면 다음 단계로
+  const back = ()=>{ if(document.visibilityState!=="visible" || !away) return; away=false; if(!as.classList.contains("on")) return document.removeEventListener("visibilitychange", back); if(i<steps.length-1){ i++; draw(1); } };
+  document.addEventListener("visibilitychange", back);
+  $("gClose").onclick = ()=>{ document.removeEventListener("visibilitychange", back); closeAS(); };
 }
 // 분류 이름이 바뀌거나 지워지면 내역과 기억해 둔 상호도 함께 옮긴다
 async function renameCat(from,to){

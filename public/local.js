@@ -285,6 +285,8 @@ function cleanSettings(s, b) {
     .map((x) => ({ id: String(x.id), name: String(x.name), alias: Array.isArray(x.alias) ? x.alias.map(String) : [],
       ...(["card", "cash", "pay", "bank", "point"].includes(x.kind) ? { kind: x.kind } : {}) }));
   if (typeof b.def === "string") s.def = b.def;
+  if (["default", "liquid"].includes(b.skin)) s.skin = b.skin;
+  if (b.links && typeof b.links === "object") s.links = { pay: Number(b.links.pay) || 0, sms: Number(b.links.sms) || 0 };
   if (Array.isArray(b.cats)) {
     const seen = new Set([INCOME]);
     const cats = b.cats.filter((c) => c && c.id && String(c.name || "").trim())

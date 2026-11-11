@@ -155,8 +155,13 @@ struct RecordPaymentIntent: AppIntent {
     static var description = IntentDescription("결제 내용(애플페이 정보나 카드 문자)을 Mono로 보내고, 가계부에 기록할지 묻는 알림을 띄워요.")
     static var openAppWhenRun: Bool = false
 
-    @Parameter(title: "결제 내용")
+    // 자동화 바로 다음에 넣으면 앞 단계의 결과(단축어 입력)가 자동으로 연결되게
+    @Parameter(title: "결제 내용", inputConnectionBehavior: .connectToPreviousIntentResult)
     var text: String
+
+    static var parameterSummary: some ParameterSummary {
+        Summary("\(\.$text)을 Mono로 보내기")
+    }
 
     func perform() async throws -> some IntentResult {
         let trimmed = text.trimmingCharacters(in: .whitespacesAndNewlines)
