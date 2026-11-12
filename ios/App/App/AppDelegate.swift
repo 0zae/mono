@@ -48,7 +48,12 @@ class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterD
     // 알림의 [기록] / [무시] / 알림 자체를 눌렀을 때
     func userNotificationCenter(_ center: UNUserNotificationCenter, didReceive response: UNNotificationResponse,
                                 withCompletionHandler completionHandler: @escaping () -> Void) {
-        if let id = response.notification.request.content.userInfo["monoId"] as? String {
+        // 여러 건 묶음 알림: [모두 기록] 또는 눌러서 앱 안에서 고르기
+        if let ids = response.notification.request.content.userInfo["monoIds"] as? [String] {
+            let st = response.actionIdentifier == MonoPending.recordAllAction ? "approved" : "review"
+            ids.forEach { MonoPending.setStatus($0, st) }
+            MonoPending.pingWeb()
+        } else if let id = response.notification.request.content.userInfo["monoId"] as? String {
             switch response.actionIdentifier {
             case MonoPending.recordAction: MonoPending.setStatus(id, "approved")
             case MonoPending.ignoreAction: MonoPending.setStatus(id, "ignored")
@@ -78,6 +83,9 @@ enum MonoPending {
     static let category = "MONO_PAYMENT"
     static let recordAction = "MONO_RECORD"
     static let ignoreAction = "MONO_IGNORE"
+    static let batchCategory = "MONO_PAYMENTS"
+    static let recordAllAction = "MONO_RECORD_ALL"
+    static let batchId = "mono-batch"
 
     static func load() -> [[String: Any]] {
         guard let s = UserDefaults.standard.string(forKey: key), let d = s.data(using: .utf8),
@@ -106,7 +114,9 @@ enum MonoPending {
         let record = UNNotificationAction(identifier: recordAction, title: "기록", options: [.foreground]) // 누르면 앱이 열리며 바로 기록
         let ignore = UNNotificationAction(identifier: ignoreAction, title: "무시", options: [.destructive])
         let cat = UNNotificationCategory(identifier: category, actions: [record, ignore], intentIdentifiers: [], options: [])
-        UNUserNotificationCenter.current().setNotificationCategories([cat])
+        let all = UNNotificationAction(identifier: recordAllAction, title: "모두 기록", options: [.foreground])
+        let batch = UNNotificationCategory(identifier: batchCategory, actions: [all], intentIdentifiers: [], options: [])
+        UNUserNotificationCenter.current().setNotificationCategories([cat, batch])
     }
 
     // 알림에 보일 짧은 요약: 카드 이름 · 금액
@@ -124,7 +134,32 @@ enum MonoPending {
         return parts.joined(separator: " · ")
     }
 
+    // 알림 글에서 금액(원) 숫자만
+    static func amountValue(_ text: String) -> Int {
+        guard let re = try? NSRegularExpression(pattern: "([0-9][0-9,]*)\\s*원"),
+              let m = re.firstMatch(in: text, range: NSRange(text.startIndex..., in: text)),
+              let r = Range(m.range(at: 1), in: text) else { return 0 }
+        return Int(text[r].replacingOccurrences(of: ",", with: "")) ?? 0
+    }
+
     static func notify(id: String, text: String) {
+        // 아직 답하지 않은 결제가 여러 건이면 알림 하나로 묶는다: "결제 3건이 기다리고 있어요 · 총 24,300원"
+        let waiting = load().filter { ($0["status"] as? String) == "pending" }
+        if waiting.count > 1 {
+            let ids = waiting.compactMap { $0["id"] as? String }
+            let total = waiting.reduce(0) { $0 + amountValue(($1["text"] as? String) ?? "") }
+            let fmt = NumberFormatter(); fmt.numberStyle = .decimal
+            let c = UNMutableNotificationContent()
+            c.title = summary(text)
+            c.body = "결제 \(ids.count)건이 기다리고 있어요" + (total > 0 ? " · 총 \(fmt.string(from: NSNumber(value: total)) ?? String(total))원" : "")
+            c.sound = .default
+            c.categoryIdentifier = batchCategory
+            c.userInfo = ["monoIds": ids]
+            let center = UNUserNotificationCenter.current()
+            center.removeDeliveredNotifications(withIdentifiers: ids + [batchId])
+            center.add(UNNotificationRequest(identifier: batchId, content: c, trigger: nil))
+            return
+        }
         let c = UNMutableNotificationContent()
         // 제목만 봐도 어떤 결제인지: "현대카드 · 5,800원" / 내용: "가계부에 기록할까요?" (앱 이름 Mono는 iOS가 위에 붙여 줌)
         c.title = summary(text)

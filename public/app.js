@@ -375,6 +375,7 @@ function noteLinks(q){
 }
 // 알림에 답하지 않은 결제: 앱 안에서 한 건씩 묻기
 async function askPayments(list){
+  if(list.length > 1) return askPaymentsBulk(list);
   const x = list[0]; if(!x) return;
   const r = await api("POST","payment/parse",{text:x.text});
   const next = ()=>{ closeAS(); setTimeout(()=>askPayments(list.slice(1)), 250); };
@@ -385,6 +386,42 @@ async function askPayments(list){
   as.querySelector(".pay-ask").textContent = `${r.merchant || "결제"} · ${won(r.total)}원${r.payment ? " · "+r.payment : ""}${r.date && r.date!==TODAY ? " · "+dayLabel(r.date) : ""}`;
   $("payOk").onclick = async ()=>{ const it = await recordParsed(r, x); renderHome(); if(sheetOpen) renderSheet(); if(it){ lastAdded = it; showDone(it, false); } next(); };
   $("payNo").onclick = next;
+}
+// 여러 건: 한 장에서 체크해서 한 번에 기록 (체크 안 한 건은 무시)
+async function askPaymentsBulk(list){
+  const rows = [];
+  for(const x of list){
+    const r = await api("POST","payment/parse",{text:x.text});
+    if(!r.cancel && r.total>0) rows.push({x, r, on:true});
+  }
+  if(rows.length <= 1) return rows.length ? askPayments([rows[0].x]) : undefined;
+  const as = showAS(`<form class="g" id="pbForm"><div class="h"></div><div class="pb-list"></div>
+    <button class="btn b" type="submit" id="pbOk"></button></form><div class="g"><button class="btn b" id="pbNo">무시</button></div>`);
+  const list$ = as.querySelector(".pb-list");
+  const update = ()=>{
+    const on = rows.filter(v=>v.on), sum = on.reduce((a,v)=>a+v.r.total,0);
+    as.querySelector(".h").textContent = `기록할 결제 ${rows.length}건`;
+    $("pbOk").textContent = on.length ? `${on.length}건 기록 · ${won(sum)}원` : "기록 안 함";
+  };
+  rows.forEach((v,i)=>{
+    const el = document.createElement("label"); el.className = "pb-row";
+    el.innerHTML = `<input type="checkbox" checked><span class="pb-ck" aria-hidden="true"></span><span class="pb-t"><b></b><small></small></span><span class="pb-a num"></span>`;
+    el.querySelector("b").textContent = v.r.merchant || "결제";
+    el.querySelector("small").textContent = [v.r.payment, v.r.date && v.r.date!==TODAY ? dayLabel(v.r.date) : ""].filter(Boolean).join(" · ") || "결제 알림";
+    el.querySelector(".pb-a").textContent = won(v.r.total)+"원";
+    el.querySelector("input").onchange = e=>{ v.on = e.target.checked; update(); };
+    list$.appendChild(el);
+  });
+  update();
+  $("pbForm").onsubmit = async e=>{
+    e.preventDefault();
+    const added = [];
+    for(const v of rows.filter(v=>v.on)){ const it = await recordParsed(v.r, v.x); if(it) added.push(it); }
+    closeAS(); renderHome(); if(sheetOpen) renderSheet();
+    if(added.length===1){ lastAdded = added[0]; showDone(added[0], false); }
+    else if(added.length) flash(`결제 ${added.length}건 기록했어요.`);
+  };
+  $("pbNo").onclick = closeAS;
 }
 window.addEventListener("monoPending", ()=>syncPending());
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") syncPending(); });
@@ -605,6 +642,8 @@ function slide(dir, render){
   leftNew.style.transition = "transform .42s cubic-bezier(.32,.72,0,1), opacity .26s .1s"; // 들어오는 글자는 살짝 늦게
   sc.style.transform = "translateX(0)";
   ghost.style.transform = `translateX(${dir>0 ? -22 : 100}%)`; ghost.style.opacity = dir>0 ? ".6" : "1";
+  // liquid: 덮는 화면이 반투명이라 밑으로 깔리는 이전 화면이 비쳐 보인다 → 이전 화면은 빠르게 투명하게 빠지게
+  if(dir>0 && S.skin==="liquid"){ ghost.style.transition = "transform .42s cubic-bezier(.32,.72,0,1), opacity .2s ease-out"; ghost.style.opacity = "0"; }
   leftNew.style.transform = "translateX(0)"; leftNew.style.opacity = "1";
   oldLabel.style.transform = `translateX(${-dir*shift}px)`; oldLabel.style.opacity = "0";
   const done = ()=>{
