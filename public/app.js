@@ -416,19 +416,32 @@ function runSplash(){
     set("spSlotRect","y", 170 + 32*(reduce ? 1 : out(clamp((t-900)/350))));
     // 3) 기록을 다 불러왔고 최소 1.5초가 지나면(늦어도 3초) 검색창 위 로고 자리로 줄어든다
     if(shrinkAt===null && ((appReady && logoImg.getBoundingClientRect().width>0 && t>=1500) || t>=3000)) shrinkAt = t;
-    if(shrinkAt!==null){
-      const dur = reduce ? 200 : 600, q = out(clamp((t-shrinkAt)/dur));
-      const ph = sp.getBoundingClientRect(), lg = logoImg.getBoundingClientRect();
-      const w0 = Math.min(230, innerWidth*.62), h0 = w0*254.52/615.97;
-      const cx = ph.width/2 - w0/2, cy = ph.height/2 - h0/2, s = lg.width / w0;
-      const x = cx + (lg.left - cx)*q, y = cy + (lg.top - cy)*q, sc = 1 + (s-1)*q;
-      svg.style.transform = `translate(${x - ph.width/2}px, ${y - ph.height/2}px) scale(${sc})`;
-      const Lf = lg.left, Tf = lg.top, Rf = ph.width - lg.right, Bf = ph.height - lg.bottom;
-      if(reduce){ sp.style.opacity = String(1-q); } else sp.style.clipPath = `inset(${Tf*q}px ${Rf*q}px ${Bf*q}px ${Lf*q}px)`;
-      if(q >= 1) return finish();
-    }
+    if(shrinkAt!==null) return shrink();
     requestAnimationFrame(frame);
   };
+  // 3) 줄어들기: 위치는 한 번만 재고, 주황 판과 글자를 transform만으로 옮긴다 (레이아웃·clip-path 없음 → 안 버벅임)
+  //    크기에 스프링을 곱해서, 줄어드는 도중에 비율은 그대로 조금 더 작아졌다가 살짝 커지며 자리 잡는다 (쫀득)
+  function shrink(){
+    $("spGlyphs").removeAttribute("mask"); $("spOs").removeAttribute("mask"); // 움직임이 끝났으니 무거운 마스크는 뗀다
+    const W = innerWidth, H = innerHeight, lg = logoImg.getBoundingClientRect();
+    const w0 = Math.min(230, W*.62), h0 = w0*254.52/615.97, sF = lg.width / w0;
+    const c1x = lg.left + lg.width/2, c1y = lg.top + lg.height/2;
+    const bg = document.createElement("div"); bg.className = "sp-bg"; sp.prepend(bg); sp.style.background = "transparent";
+    svg.style.transition = "none";
+    const MOVE = reduce ? 200 : 560, END = reduce ? 200 : 1100, t0 = performance.now();
+    const step = now=>{
+      const t = now - t0, p = out(clamp(t/MOVE));
+      let k = 1; // 스프링: 0.24초부터 출렁 (최저 약 0.87 → 약 1.03 → 1)
+      if(!reduce){ const u = (t-240)/1000; if(u>0) k = 1 - .26*Math.exp(-4.5*u)*Math.sin(10.5*u); }
+      const cx = W/2 + (c1x - W/2)*p, cy = H/2 + (c1y - H/2)*p;
+      const bw = (W + (lg.width - W)*p)*k, bh = (H + (lg.height - H)*p)*k, gs = (1 + (sF-1)*p)*k;
+      bg.style.transform = `translate(${cx-bw/2}px, ${cy-bh/2}px) scale(${bw/W}, ${bh/H})`;
+      svg.style.transform = `translate(${cx - W/2 - w0*gs/2}px, ${cy - H/2 - h0*gs/2}px) scale(${gs})`;
+      if(t >= END) return finish();
+      requestAnimationFrame(step);
+    };
+    requestAnimationFrame(step);
+  }
   requestAnimationFrame(frame);
 }
 
@@ -575,7 +588,9 @@ function slide(dir, render){
   const top = dir>0 ? sc : ghost, under = dir>0 ? ghost : sc;
   sc.style.position = "relative";
   top.style.zIndex = "2"; under.style.zIndex = "1";
-  top.style.background = "var(--sheet-solid)"; top.style.boxShadow = "-10px 0 30px rgba(0,0,0,.08)";
+  top.style.background = "var(--sheet-solid)";
+  top.style.webkitBackdropFilter = top.style.backdropFilter = "var(--slide-blur, none)"; // liquid: 덮는 화면도 유리
+  top.style.boxShadow = "-10px 0 30px rgba(0,0,0,.08)";
   top.style.clipPath = "inset(0 0 0 -40px)"; // 그림자는 왼쪽 가장자리에만
   // 위쪽 가장자리를 부드럽게 흐려서 상단바와 경계선이 생기지 않게
   top.style.webkitMaskImage = top.style.maskImage = "linear-gradient(to bottom, transparent 0, #000 10px)";
@@ -594,7 +609,7 @@ function slide(dir, render){
   oldLabel.style.transform = `translateX(${-dir*shift}px)`; oldLabel.style.opacity = "0";
   const done = ()=>{
     ghost.remove(); oldLabel.remove();
-    for(const k of ["transition","transform","position","zIndex","background","boxShadow","clipPath","maskImage","webkitMaskImage"]) sc.style[k] = "";
+    for(const k of ["transition","transform","position","zIndex","background","backdropFilter","webkitBackdropFilter","boxShadow","clipPath","maskImage","webkitMaskImage"]) sc.style[k] = "";
     for(const k of ["transition","transform","opacity"]) leftNew.style[k] = "";
     sliding = false;
   };

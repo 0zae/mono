@@ -96,6 +96,8 @@ button{cursor:pointer;-webkit-tap-highlight-color:transparent}
 .splash{position:fixed;inset:0;background:#FF5A2E;z-index:20}
 .splash svg{position:absolute;left:50%;top:50%;width:min(230px,62vw);transform:translate(-50%,-50%);transform-origin:0 0;overflow:visible}
 .splash-done .splash{display:none}
+.sp-bg{position:absolute;left:0;top:0;width:100%;height:100%;background:#FF5A2E;transform-origin:0 0;will-change:transform}
+.splash svg{will-change:transform}
 html:not(.splash-done) .logo img{opacity:0}
 /* 로고: 검색창 바로 위 가운데 (구글식) */
 .logo{display:flex;justify-content:center;margin:0 0 38px}
