@@ -290,7 +290,7 @@ async function understandItem(it, d, retry){
 function flash(msg){ clearTimeout(preview.clr); under.innerHTML=`<span class="done"></span>`; under.firstChild.textContent=msg; }
 // 화살표: 목록은 iOS처럼 가늘고 연한 화살표, 첫 화면 '내역 보기' 하나만 동그란 원 화살표
 const CHEV = `<svg class="chv" width="7" height="12" viewBox="0 0 7 12" aria-hidden="true"><path d="M1.2 1.2 5.8 6l-4.6 4.8" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
-const CHEV_ROUND = `<svg class="chv-round" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="chv-bg" cx="9" cy="9" r="9"/><path d="M7.6 5.6 11 9l-3.4 3.4" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
+const CHEV_ROUND = `<svg class="chv-round" width="18" height="18" viewBox="0 0 18 18" aria-hidden="true"><circle class="chv-bg" cx="9" cy="9" r="9"/><path d="M7.6 5.6 11 9l-3.4 3.4" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/></svg>`;
 let shownOut = null, animId = 0, loaded = false;
 function renderHome(){
   const list = items(THIS_YM);
@@ -669,7 +669,7 @@ function dayGroups(list){
     const net=days[d].reduce((s,i)=>s+(i.t==="in"?i.a:-i.a),0);
     h += `<div class="cap"><span>${dayLabel(d)}</span><span class="num">${net>0?"+":""}${won(net)}원</span></div><div class="group">`+
       days[d].map(i=>{ const mn=methodName(i);
-        return `<button class="cell" data-id="${i.id}"><span class="cdot" style="background:${color(i.c)}"></span><span class="t"><span>${esc(i.m)}</span><small>${esc(i.c)}${mn?" · "+esc(mn):""}${i.rec?" · 정기":""}</small></span><span class="r num ${i.t}">${i.t==="in"?"+":"-"}${won(i.a)}원</span></button>`; }).join("")+`</div>`;
+        return `<div class="sw" data-sw="${i.id}"><button class="sw-del" type="button" tabindex="-1" aria-label="삭제"><svg width="20" height="20" viewBox="0 0 20 20" aria-hidden="true"><path d="M3.5 5.5h13M8 5.5V4a1 1 0 0 1 1-1h2a1 1 0 0 1 1 1v1.5M5 5.5l.8 10.2a1.5 1.5 0 0 0 1.5 1.3h5.4a1.5 1.5 0 0 0 1.5-1.3L15 5.5M8.3 8.5v5.5M11.7 8.5v5.5" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button class="cell" data-id="${i.id}"><span class="cdot" style="background:${color(i.c)}"></span><span class="t"><span>${esc(i.m)}</span><small>${esc(i.c)}${mn?" · "+esc(mn):""}${i.rec?" · 정기":""}</small></span><span class="r num ${i.t}">${i.t==="in"?"+":"-"}${won(i.a)}원</span></button></div>`; }).join("")+`</div>`;
   });
   return h;
 }
@@ -927,7 +927,74 @@ $("scrim2").onclick=closeAS;
 // 시트 안에서 입력칸을 누르면 그 칸이 보이게
 $("as").addEventListener("focusin", e=>{ setTimeout(()=>e.target.scrollIntoView({block:"nearest"}), 300); });
 
+/* ---------- 내역 밀어서 삭제 ---------- */
+// 행을 오른쪽→왼쪽으로 밀면 뒤에 휴지통. 반 넘게 밀거나 휙 밀면 멈춤, 끝까지 밀면 바로 삭제, 지운 뒤엔 실행 취소
+let swOpen=null, swBlockClick=0;
+const SW_W=76;
+function swSet(sw, x, anim){
+  const cell=sw.querySelector(".cell"), del=sw.querySelector(".sw-del");
+  cell.style.transition = del.style.transition = anim ? "transform .34s cubic-bezier(.3,1.25,.5,1), width .34s cubic-bezier(.3,1.25,.5,1)" : "none";
+  cell.style.transform = x ? `translateX(${x}px)` : "";
+  del.style.width = Math.max(0,-x)+"px";
+}
+function swClose(){ if(swOpen){ swSet(swOpen, 0, true); swOpen=null; } }
+function swDelete(sw){
+  const id=sw.dataset.sw, [ym,i]=find(id); if(!ym) return;
+  const it={...S.months[ym][i]};
+  swOpen=null;
+  sw.style.height=sw.offsetHeight+"px"; void sw.offsetHeight;
+  sw.classList.add("gone"); sw.style.height="0px";
+  setTimeout(()=>{ remove(id); sheetToast(`${it.m} ${won(it.a)}원 삭제했어요`, ()=>restoreItem(it)); }, 240);
+}
+function restoreItem(it){
+  (S.months[it.d.slice(0,7)] ||= []).push(it);
+  api("POST","items",it).catch(fail);
+  renderHome(); if(sheetOpen) renderSheet();
+}
+// 시트 아래쪽에 잠깐 뜨는 알림 (실행 취소)
+let toastTimer=null;
+function sheetToast(msg, undo){
+  let t=$("sheetToast");
+  if(!t){ t=document.createElement("div"); t.id="sheetToast"; t.className="sheet-toast"; t.setAttribute("role","status"); $("sheet").appendChild(t); }
+  t.innerHTML=`<span></span>${undo?`<button type="button">실행 취소</button>`:""}`;
+  t.firstChild.textContent=msg;
+  if(undo) t.querySelector("button").onclick=()=>{ t.classList.remove("on"); undo(); };
+  t.classList.add("on"); clearTimeout(toastTimer); toastTimer=setTimeout(()=>t.classList.remove("on"), 4000);
+}
+{
+  const sc=$("scroll"); let g=null;
+  sc.addEventListener("pointerdown", e=>{
+    const sw=e.target.closest(".sw");
+    if(swOpen && swOpen!==sw){ swClose(); swBlockClick=Date.now()+300; }
+    if(!sw || e.target.closest(".sw-del")) return;
+    g={sw, x0:e.clientX, y0:e.clientY, t0:performance.now(), base: swOpen===sw ? -SW_W : 0, dx:0, horiz:null, id:e.pointerId};
+  });
+  sc.addEventListener("pointermove", e=>{
+    if(!g || e.pointerId!==g.id) return;
+    const mx=e.clientX-g.x0, my=e.clientY-g.y0;
+    if(g.horiz===null){ if(Math.abs(mx)<8 && Math.abs(my)<8) return; g.horiz = Math.abs(mx)>Math.abs(my); if(g.horiz){ g.sw.querySelector(".cell").setPointerCapture?.(e.pointerId); } }
+    if(!g.horiz){ g=null; return; }
+    e.preventDefault();
+    const w=g.sw.offsetWidth;
+    g.dx=Math.max(-w*.92, Math.min(0, g.base+mx));
+    swSet(g.sw, g.dx, false);
+  });
+  const end=e=>{
+    if(!g) return; const s=g; g=null;
+    if(!s.horiz) return;
+    swBlockClick=Date.now()+300;
+    const w=s.sw.offsetWidth, v=(e.clientX-s.x0)/Math.max(1,performance.now()-s.t0);
+    if(s.dx < -w*.6){ swSet(s.sw, -w, true); return swDelete(s.sw); }
+    if(s.dx < -SW_W/2 || v < -.5){ swSet(s.sw, -SW_W, true); swOpen=s.sw; }
+    else { swSet(s.sw, 0, true); if(swOpen===s.sw) swOpen=null; }
+  };
+  sc.addEventListener("pointerup", end); sc.addEventListener("pointercancel", end);
+  sc.addEventListener("scroll", ()=>{ if(swOpen && !g) swClose(); }, {passive:true});
+}
+
 $("scroll").addEventListener("click", e=>{
+  if(Date.now() < swBlockClick){ e.preventDefault(); return; }
+  const del=e.target.closest(".sw-del"); if(del) return swDelete(del.closest(".sw"));
   const t=e.target.closest("[data-id]"); if(t) return openTx(t.dataset.id);
   const fc=e.target.closest("[data-fc]"), fp=e.target.closest("[data-fp]");
   if(fc||fp){ listScroll = $("scroll").scrollTop; filter = fc ? {kind:"c", value:fc.dataset.fc} : {kind:"p", value:fp.dataset.fp}; return slide(1, ()=>{ view="filter"; renderSheet(); }); }

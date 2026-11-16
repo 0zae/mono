@@ -3,9 +3,11 @@ html[data-skin="liquid"]{--home:transparent;
   --fill:rgba(255,255,255,.42);
   --cell:rgba(255,255,255,.55);
   --sep:rgba(60,60,67,.14);
-  --pop:rgba(255,255,255,.38);
-  --glass:rgba(246,238,233,.42);
-  --card-glass:rgba(255,255,255,.34);
+  --pop:rgba(238,222,214,.46);
+  --ctl:rgba(255,255,255,.74); --ctl-on:rgba(255,255,255,.9);
+  --ctl-drop:0 2px 8px rgba(80,30,10,.08),0 0 0 .5px rgba(255,255,255,.6);
+  --glass:rgba(240,228,221,.40);
+  --card-glass:rgba(255,255,255,.62);
   --sheet-solid:rgba(248,242,238,.82); --slide-blur:blur(24px) saturate(120%);
   --card-drop:0 6px 18px rgba(80,30,10,.07),0 1px 3px rgba(80,30,10,.05);
   --card-edge:rgba(255,255,255,.7);
@@ -19,7 +21,9 @@ html[data-skin="liquid"]:not([data-theme="light"]){--home:transparent;
     --fill:rgba(255,255,255,.12);
     --cell:rgba(40,40,44,.45);
     --sep:rgba(255,255,255,.1);
-    --pop:rgba(30,30,34,.4);
+    --pop:rgba(26,20,18,.55);
+    --ctl:rgba(255,255,255,.13); --ctl-on:rgba(255,255,255,.2);
+    --ctl-drop:0 2px 8px rgba(0,0,0,.3),0 0 0 .5px rgba(255,255,255,.1);
     --glass:rgba(22,18,16,.45);
     --card-glass:rgba(255,255,255,.07);
     --sheet-solid:rgba(26,21,19,.82); --slide-blur:blur(24px) saturate(120%);
@@ -40,8 +44,9 @@ html[data-skin="liquid"] .field .cam{width:40px;height:40px;margin-right:-2px}
 html[data-skin="liquid"] .foot{background:transparent}
 html[data-skin="liquid"] .foot button{background:var(--lg-tint);border-radius:999px;padding:11px 18px;box-shadow:var(--lg-rim),var(--lg-drop);color:var(--label)}
 html[data-skin="liquid"] .foot button:hover{background:var(--lg-tint)}
-html[data-skin="liquid"] .sheet{left:8px;right:8px;bottom:8px;border-radius:38px;background:var(--glass);
-  box-shadow:var(--lg-rim),0 20px 60px rgba(80,30,10,.18)}
+/* 시트: 양옆은 8px 띄우고, 아래는 화면 밖으로 이어지게 (아래 모서리는 아이폰 화면 곡선이 잘라 줌) */
+html[data-skin="liquid"] .sheet{left:8px;right:8px;bottom:0;border-radius:38px 38px 0 0;background:var(--glass);
+  box-shadow:inset 0 1px 1.5px rgba(255,255,255,.95),inset 1px 0 1px rgba(255,255,255,.35),inset -1px 0 1px rgba(255,255,255,.35),0 -6px 40px rgba(80,30,10,.14)}
 html[data-skin="liquid"] .scrim{background:rgba(255,255,255,.06);-webkit-backdrop-filter:blur(6px);backdrop-filter:blur(6px)}
 html[data-skin="liquid"] .grab::after{background:rgba(60,60,67,.28)}
 html[data-skin="liquid"] .bar{padding:16px 16px 6px}
@@ -87,3 +92,29 @@ html[data-skin="liquid"],html[data-skin="liquid"] body{background-color:#140B08}
 .wall{position:fixed;inset:0;width:100%;height:100%;z-index:-1;display:none;pointer-events:none}
 html[data-skin="liquid"] .wall{display:block}
 html[data-skin="liquid"] body{background:transparent}
+
+/* 밀어서 삭제: 휴지통은 빨간 유리 캡슐(밀수록 물방울처럼 늘어남), 알림은 유리 알약 */
+html[data-skin="liquid"] .sw-del{background:transparent;justify-content:center}
+html[data-skin="liquid"] .sw-del::before{content:"";position:absolute;top:7px;bottom:7px;left:6px;right:8px;border-radius:999px;
+  background:color-mix(in srgb,var(--red) 82%,transparent);-webkit-backdrop-filter:blur(12px) saturate(160%);backdrop-filter:blur(12px) saturate(160%);
+  box-shadow:inset 0 1px 1px rgba(255,255,255,.55),inset 0 -1px 1px rgba(255,255,255,.18),0 6px 16px color-mix(in srgb,var(--red) 35%,transparent)}
+html[data-skin="liquid"] .sw-del svg{position:relative;margin:0}
+html[data-skin="liquid"] .sheet-toast{background:var(--lg-tint);color:var(--label);-webkit-backdrop-filter:var(--lg-blur);backdrop-filter:var(--lg-blur);box-shadow:var(--lg-rim),var(--lg-drop)}
+html[data-skin="liquid"] .sheet-toast button{color:var(--accent)}
+
+/* ---------- 층 구분 강화 ----------
+   바탕판(시트·팝업): 따뜻한 색이 도는 투명 유리 / 그 위 버튼·칩·입력칸·카드: 밝고 또렷한 유리 + 그림자 */
+html[data-skin="liquid"] .scrim2{background:rgba(60,28,16,.16);-webkit-backdrop-filter:blur(8px) saturate(120%);backdrop-filter:blur(8px) saturate(120%)}
+html[data-skin="liquid"] .as{-webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%)}
+html[data-skin="liquid"] .as .chips button,html[data-skin="liquid"] .as .kinds button,html[data-skin="liquid"] .as .pop-x,
+html[data-skin="liquid"] .as .pop-foot button,html[data-skin="liquid"] .as .pop-foot .danger-soft,
+html[data-skin="liquid"] .bar button:not(.b),html[data-skin="liquid"] .mnav button,html[data-skin="liquid"] .txm{background:var(--ctl);box-shadow:var(--lg-rim),var(--ctl-drop)}
+html[data-skin="liquid"] .as .chips button:active,html[data-skin="liquid"] .as .kinds button:active,html[data-skin="liquid"] .as .pop-foot button:active{background:var(--ctl-on)}
+html[data-skin="liquid"] .as .chips button.sel{background:color-mix(in srgb,var(--accent) 90%,transparent);box-shadow:inset 0 1px 1px rgba(255,255,255,.5),0 4px 12px color-mix(in srgb,var(--accent) 30%,transparent)}
+html[data-skin="liquid"] .as .kinds button.sel{background:color-mix(in srgb,var(--accent) 16%,var(--ctl));box-shadow:inset 0 0 0 1.5px var(--accent),var(--ctl-drop)}
+html[data-skin="liquid"] .as .fields input,html[data-skin="liquid"] .as .fields textarea{background:var(--ctl);box-shadow:inset 0 1px 2px rgba(80,30,10,.06),0 0 0 .5px rgba(255,255,255,.7)}
+html[data-skin="liquid"] .as .sw-row .tg{background:rgba(120,90,80,.22)}
+html[data-skin="liquid"] .as .pb-list{background:var(--ctl);box-shadow:var(--lg-rim),var(--ctl-drop)}
+html[data-skin="liquid"] .as .gs{background:rgba(255,255,255,.35)}
+html[data-skin="liquid"] .as .gs-row,html[data-skin="liquid"] .as .gs-search,html[data-skin="liquid"] .as .gs-act{background:var(--ctl)}
+html[data-skin="liquid"] .as .sub,html[data-skin="liquid"] .as .hint-line{color:var(--label2)}
