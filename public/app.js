@@ -484,15 +484,18 @@ function runSplash(){
   requestAnimationFrame(frame);
 }
 
-// C · 스플래시 없이: 기록을 불러오면(늦어도 1.2초) 로고 → 입력창 → 안내 → 아래 글이 차례로 살짝 떠오른다
+// C · 스플래시 없이: 처음엔 배경만 → 0.6초 쉬고 → 로고 → 입력창 → 안내 → 아래 글이 차례로 떠오른다
+//   키보드(커서)는 입력창이 다 자리 잡은 뒤에 올린다: 움직이는 중에 올리면 iOS가 커서를 엉뚱한 곳(글자 사이)에 그린다
 function splashNone(logoImg, finish){
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
-  const t0 = performance.now(), E = "cubic-bezier(.32,.72,0,1)";
+  const t0 = performance.now(), E = "cubic-bezier(.32,.72,0,1)", HOLD = 600, GAP = 160, DUR = 800;
   const wait = ()=>{
-    if(!(appReady || performance.now()-t0 >= 1200)) return requestAnimationFrame(wait);
+    if(!((appReady && performance.now()-t0 >= HOLD) || performance.now()-t0 >= 1800)) return requestAnimationFrame(wait);
     const els = [logoImg, document.querySelector(".field"), $("ai"), document.querySelector(".foot")];
-    if(!reduce) els.forEach((el,k)=>el?.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],{duration:650,delay:60+k*80,easing:E,fill:"backwards"}));
-    finish();
+    if(reduce) return finish();
+    els.forEach((el,k)=>el?.animate([{opacity:0,transform:"translateY(12px)"},{opacity:1,transform:"none"}],{duration:DUR,delay:k*GAP,easing:E,fill:"backwards"}));
+    document.documentElement.classList.add("splash-done"); syncPending();
+    setTimeout(()=>q.focus(), GAP + DUR); // 입력창 움직임이 끝난 뒤
   };
   requestAnimationFrame(wait);
 }
