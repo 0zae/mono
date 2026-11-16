@@ -432,6 +432,8 @@ function runSplash(){
   const sp = $("splash"), svg = $("splashSvg"), logoImg = document.querySelector(".logo img");
   const finish = ()=>{ document.documentElement.classList.add("splash-done"); q.focus(); syncPending(); };
   if(!sp) return finish();
+  if(sp.dataset.style==="fade") return splashFade(sp, logoImg, finish);
+  if(sp.dataset.style==="none") return splashNone(logoImg, finish);
   const set = (id, k, v)=>$(id).setAttribute(k, v);
   const ease = t=>t<.5?4*t*t*t:1-Math.pow(-2*t+2,3)/2, out = t=>1-Math.pow(1-t,3), clamp = t=>Math.min(1,Math.max(0,t));
   const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
@@ -482,6 +484,38 @@ function runSplash(){
   requestAnimationFrame(frame);
 }
 
+// C · 스플래시 없이: 기록을 불러오면(늦어도 1.2초) 로고 → 입력창 → 안내 → 아래 글이 차례로 살짝 떠오른다
+function splashNone(logoImg, finish){
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const t0 = performance.now(), E = "cubic-bezier(.32,.72,0,1)";
+  const wait = ()=>{
+    if(!(appReady || performance.now()-t0 >= 1200)) return requestAnimationFrame(wait);
+    const els = [logoImg, document.querySelector(".field"), $("ai"), document.querySelector(".foot")];
+    if(!reduce) els.forEach((el,k)=>el?.animate([{opacity:0,transform:"translateY(10px)"},{opacity:1,transform:"none"}],{duration:650,delay:60+k*80,easing:E,fill:"backwards"}));
+    finish();
+  };
+  requestAnimationFrame(wait);
+}
+// A · 조용히 녹아들기: 완성된 mono 글자가 떠 있다가, 주황이 스르르 걷히며 로고가 제자리에 내려앉고 입력창·아래 글이 뒤따라 떠오른다
+function splashFade(sp, logoImg, finish){
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const t0 = performance.now(), E = "cubic-bezier(.32,.72,0,1)";
+  const wait = ()=>{
+    const t = performance.now() - t0;
+    if(!((appReady && logoImg.getBoundingClientRect().width>0 && t>=700) || t>=2500)) return requestAnimationFrame(wait);
+    if(reduce){ sp.animate([{opacity:1},{opacity:0}],{duration:200,fill:"forwards"}).onfinish = finish; return; }
+    document.documentElement.classList.add("splash-fading");
+    sp.animate([{opacity:1},{opacity:0}],{duration:650,easing:"ease",fill:"forwards"});
+    $("splashSvg").animate([{opacity:1,transform:"translate(-50%,-50%) scale(1)"},{opacity:0,transform:"translate(-50%,-50%) scale(.94)"}],{duration:420,easing:"ease",fill:"forwards"});
+    logoImg.animate([{opacity:0,transform:"scale(1.18)"},{opacity:1,transform:"scale(1)"}],{duration:720,delay:120,easing:E,fill:"backwards"});
+    [document.querySelector(".field"), $("ai"), document.querySelector(".foot")].forEach((el,k)=>{
+      el?.animate([{opacity:0,transform:"translateY(8px)"},{opacity:1,transform:"none"}],{duration:620,delay:280+k*90,easing:E,fill:"backwards"});
+    });
+    setTimeout(()=>{ document.documentElement.classList.remove("splash-fading"); finish(); }, 760);
+  };
+  requestAnimationFrame(wait);
+}
+
 /* ---------- 영수증 ---------- */
 // 사진을 줄여서(긴 변 1600px JPEG) Gemini에 보낸다
 async function shrinkImage(file){
@@ -506,15 +540,18 @@ function receiptLine(r){
 $("camFile").addEventListener("change", async e=>{
   const f = e.target.files[0]; e.target.value = "";
   if(!f) return;
-  const cam = $("cam"); cam.classList.add("busy");
-  flash("영수증 읽는 중…");
+  // 읽는 동안: 아이콘엔 주황 스캔선, 입력창 안내 글은 "영수증 읽는 중…" (점이 하나씩 늘어남)
+  const cam = $("cam"), form = $("form"), ph = q.placeholder;
+  cam.classList.add("busy"); form.classList.add("reading");
+  let n = 0; const tick = ()=>{ q.placeholder = "영수증 읽는 중" + ".".repeat(n++ % 4); };
+  tick(); const dots = setInterval(tick, 400);
   try{
     const r = await api("POST","receipt", await shrinkImage(f));
     if(r.error){ flash(r.error); return; }
     q.value = receiptLine(r); preview();
     q.focus();
   }catch(err){ flash("영수증을 읽지 못했어요. 다시 찍어 주세요."); }
-  finally{ cam.classList.remove("busy"); }
+  finally{ clearInterval(dots); q.placeholder = ph; cam.classList.remove("busy"); form.classList.remove("reading"); }
 });
 
 /* ---------- edits ---------- */

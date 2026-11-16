@@ -2,10 +2,8 @@
   "appId": "com.youngzae.mono",
   "appName": "Mono",
   "webDir": "public",
-  "backgroundColor": "#FF5A2E",
   "ios": {
     "contentInset": "never",
-    "backgroundColor": "#FF5A2E",
     "scrollEnabled": false
   },
   "plugins": {
