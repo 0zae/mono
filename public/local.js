@@ -286,9 +286,10 @@ export async function readReceipt(key, s, { data, mime }) {
     required: ["merchant", "total", "date", "payment", "category", "readable"],
   };
   // 아이폰 앱: 네이티브가 요청을 보낸다 → 읽는 중에 앱을 나가도 끝까지 읽고 알림을 띄운다
-  const C = window.Capacitor, RP = C?.isNativePlatform?.() && (C.Plugins?.MonoReceipt || C.registerPlugin?.("MonoReceipt"));
-  if (RP) {
-    const { result } = await RP.read({ key, prompt, schema, data, mime: mime || "image/jpeg" });
+  // (앱 안에 직접 넣은 플러그인이라 Capacitor.Plugins 목록에는 없다 → 브리지에 이름으로 바로 요청)
+  const C = window.Capacitor;
+  if (C?.isNativePlatform?.() && C.nativePromise) {
+    const { result } = await C.nativePromise("MonoReceipt", "read", { key, prompt, schema, data, mime: mime || "image/jpeg" });
     window.Capacitor.Plugins.Preferences?.remove({ key: "monoReceipt" }).catch?.(() => {}); // 바로 받았으니 저장본은 지운다
     return result;
   }
