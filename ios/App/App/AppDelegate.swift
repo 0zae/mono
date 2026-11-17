@@ -269,7 +269,8 @@ public class MonoReceiptPlugin: CAPPlugin, CAPBridgedPlugin {
                           schema: [String: Any], finish: @escaping ([String: Any]?, String?) -> Void) {
         guard let model = models.first else { finish(nil, "all models failed"); return }
         let rest = Array(models.dropFirst())
-        var gen: [String: Any] = ["temperature": 0, "responseMimeType": "application/json", "responseSchema": schema]
+        // 사진 해상도는 중간: 영수증 글자는 읽히고 처리 시간은 줄어든다
+        var gen: [String: Any] = ["temperature": 0, "responseMimeType": "application/json", "responseSchema": schema, "mediaResolution": "MEDIA_RESOLUTION_MEDIUM"]
         if model.hasPrefix("gemini-3.") && model.contains("flash") { gen["thinkingConfig"] = ["thinkingLevel": "minimal"] }
         let body: [String: Any] = [
             "contents": [["role": "user", "parts": [["text": prompt], ["inline_data": ["mime_type": mime, "data": data]]]]],
@@ -282,8 +283,10 @@ public class MonoReceiptPlugin: CAPPlugin, CAPBridgedPlugin {
         req.setValue("application/json", forHTTPHeaderField: "content-type")
         req.setValue(key, forHTTPHeaderField: "x-goog-api-key")
         req.httpBody = payload
+        let t0 = Date()
         URLSession.shared.dataTask(with: req) { d, resp, err in
             let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            print("[receipt] \(model) \(status) \(Int(Date().timeIntervalSince(t0) * 1000))ms \(err?.localizedDescription ?? "")")
             if let d = d, status == 200,
                let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
                let parts = ((j["candidates"] as? [[String: Any]])?.first?["content"] as? [String: Any])?["parts"] as? [[String: Any]] {

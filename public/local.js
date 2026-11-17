@@ -124,7 +124,7 @@ async function materializeRecurring() {
 
 /* ---------- Gemini ---------- */
 // 한 모델에 한 번 요청. parts는 텍스트·이미지 조각, schema는 받고 싶은 JSON 모양
-async function geminiOnce(key, model, parts, schema, timeoutMs, outer) {
+async function geminiOnce(key, model, parts, schema, timeoutMs, outer, extra) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": key },
@@ -136,6 +136,7 @@ async function geminiOnce(key, model, parts, schema, timeoutMs, outer) {
         ...(/^gemini-3\.\d+-flash/.test(model) ? { thinkingConfig: { thinkingLevel: "minimal" } } : {}),
         responseMimeType: "application/json",
         responseSchema: schema,
+        ...(extra || {}),
       },
     }),
     signal: outer ? AbortSignal.any([AbortSignal.timeout(timeoutMs), outer]) : AbortSignal.timeout(timeoutMs),
@@ -173,16 +174,19 @@ async function geminiRace(key, parts, schema, timeoutMs = 25000) {
   const order = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-lite-latest"];
   const ctl = new AbortController();
   return new Promise((resolve, reject) => {
-    let left = order.length, done = false, lastErr;
-    const fail = (e) => { lastErr = e; if (--left === 0 && !done) reject(lastErr); };
-    order.forEach((model, i) => {
-      setTimeout(() => {
-        if (done) { left--; return; }
-        geminiOnce(key, model, parts, schema, timeoutMs, ctl.signal)
-          .then((r) => { if (!done) { done = true; ctl.abort(); resolve(r); } })
-          .catch((e) => { if (!done) fail(e); });
-      }, i === 0 ? 0 : i * 4000);
-    });
+    let next = 0, running = 0, done = false, lastErr, timer;
+    const t0 = performance.now();
+    // 다음 모델 출발: 4초마다, 또는 앞 모델이 실패하면 기다리지 않고 바로
+    const launch = () => {
+      if (done || next >= order.length) return;
+      const model = order[next++]; running++;
+      clearTimeout(timer); timer = setTimeout(launch, 4000);
+      geminiOnce(key, model, parts, schema, timeoutMs, ctl.signal, { mediaResolution: "MEDIA_RESOLUTION_MEDIUM" })
+        .then((r) => { if (done) return; done = true; clearTimeout(timer); ctl.abort(); console.log(`[receipt] ${model} ${Math.round(performance.now() - t0)}ms`); resolve(r); })
+        .catch((e) => { running--; lastErr = e; console.warn(`[receipt] ${model} 실패`, e.status || e.message); if (done) return;
+          if (next < order.length) launch(); else if (running === 0) { clearTimeout(timer); reject(lastErr); } });
+    };
+    launch();
   });
 }
 
@@ -282,7 +286,7 @@ export async function readReceipt(key, s, { data, mime }) {
     required: ["merchant", "total", "date", "payment", "category", "readable"],
   };
   // 아이폰 앱: 네이티브가 요청을 보낸다 → 읽는 중에 앱을 나가도 끝까지 읽고 알림을 띄운다
-  const RP = window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.MonoReceipt;
+  const C = window.Capacitor, RP = C?.isNativePlatform?.() && (C.Plugins?.MonoReceipt || C.registerPlugin?.("MonoReceipt"));
   if (RP) {
     const { result } = await RP.read({ key, prompt, schema, data, mime: mime || "image/jpeg" });
     window.Capacitor.Plugins.Preferences?.remove({ key: "monoReceipt" }).catch?.(() => {}); // 바로 받았으니 저장본은 지운다
