@@ -124,7 +124,7 @@ async function materializeRecurring() {
 
 /* ---------- Gemini ---------- */
 // 한 모델에 한 번 요청. parts는 텍스트·이미지 조각, schema는 받고 싶은 JSON 모양
-async function geminiOnce(key, model, parts, schema, timeoutMs) {
+async function geminiOnce(key, model, parts, schema, timeoutMs, outer) {
   const res = await fetch(`https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`, {
     method: "POST",
     headers: { "content-type": "application/json", "x-goog-api-key": key },
@@ -138,7 +138,7 @@ async function geminiOnce(key, model, parts, schema, timeoutMs) {
         responseSchema: schema,
       },
     }),
-    signal: AbortSignal.timeout(timeoutMs),
+    signal: outer ? AbortSignal.any([AbortSignal.timeout(timeoutMs), outer]) : AbortSignal.timeout(timeoutMs),
   }).catch((e) => { e.retryable = true; throw e; });
   if (!res.ok) {
     const err = new Error(`Gemini ${model} ${res.status}: ${(await res.text()).slice(0, 300)}`);
@@ -165,6 +165,25 @@ async function gemini(key, parts, schema, timeoutMs = 12000) {
     }
   }
   throw lastErr;
+}
+
+// 사진 읽기용: 빠른 lite 모델부터 보내고, 4초 안에 답이 없으면 다른 모델도 같이 보내서 먼저 온 답을 쓴다
+// (한 모델이 붐벼서 오래 걸려도 기다리지 않게). 답이 오면 나머지 요청은 취소
+async function geminiRace(key, parts, schema, timeoutMs = 25000) {
+  const order = ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-lite-latest"];
+  const ctl = new AbortController();
+  return new Promise((resolve, reject) => {
+    let left = order.length, done = false, lastErr;
+    const fail = (e) => { lastErr = e; if (--left === 0 && !done) reject(lastErr); };
+    order.forEach((model, i) => {
+      setTimeout(() => {
+        if (done) { left--; return; }
+        geminiOnce(key, model, parts, schema, timeoutMs, ctl.signal)
+          .then((r) => { if (!done) { done = true; ctl.abort(); resolve(r); } })
+          .catch((e) => { if (!done) fail(e); });
+      }, i === 0 ? 0 : i * 4000);
+    });
+  });
 }
 
 const catLines = (s) => [
@@ -254,14 +273,22 @@ export async function readReceipt(key, s, { data, mime }) {
     ...catLines(s),
     "6. readable: 영수증으로 읽을 수 있으면 true, 영수증이 아니거나 금액을 못 읽으면 false.",
   ].join("\n");
-  return gemini(key, [{ text: prompt }, { inline_data: { mime_type: mime || "image/jpeg", data } }], {
+  const schema = {
     type: "OBJECT",
     properties: {
       merchant: { type: "STRING" }, total: { type: "NUMBER" }, date: { type: "STRING" }, payment: { type: "STRING" },
       category: { type: "STRING", enum: catNames(s) }, readable: { type: "BOOLEAN" },
     },
     required: ["merchant", "total", "date", "payment", "category", "readable"],
-  }, 30000);
+  };
+  // 아이폰 앱: 네이티브가 요청을 보낸다 → 읽는 중에 앱을 나가도 끝까지 읽고 알림을 띄운다
+  const RP = window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.MonoReceipt;
+  if (RP) {
+    const { result } = await RP.read({ key, prompt, schema, data, mime: mime || "image/jpeg" });
+    window.Capacitor.Plugins.Preferences?.remove({ key: "monoReceipt" }).catch?.(() => {}); // 바로 받았으니 저장본은 지운다
+    return result;
+  }
+  return geminiRace(key, [{ text: prompt }, { inline_data: { mime_type: mime || "image/jpeg", data } }], schema);
 }
 
 async function understand({ text = "", memo = "", methods = [] }) {
@@ -374,7 +401,10 @@ export async function localApi(method, path, body = {}) {
     }
   }
   if (name === "payment" && id === "parse" && method === "POST") {
-    const r = await parsePayment(await geminiKey(), s, String(body.text || ""));
+    // fast: 규칙으로 바로 읽히면(금액·가게가 다 나오면) Gemini를 기다리지 않는다 → 알림 눌러 들어오자마자 뜨게
+    const text = String(body.text || "");
+    const rule = body.fast ? parsePaymentRule(text) : null;
+    const r = rule && rule.total > 0 && rule.merchant ? { ...rule, rule: true } : await parsePayment(await geminiKey(), s, text);
     return { ...r, date: /^\d{4}-\d{2}-\d{2}$/.test(r.date || "") ? r.date : "", total: Math.round(r.total || 0) };
   }
   if (name === "understand" && method === "POST") {

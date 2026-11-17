@@ -215,3 +215,104 @@ struct MonoShortcuts: AppShortcutsProvider {
         AppShortcut(intent: RecordPaymentIntent(), phrases: ["\(.applicationName)에 결제 보내기"])
     }
 }
+
+// ---------- 영수증 읽기 (앱을 나가도 끝까지) ----------
+// 웹 화면은 앱이 백그라운드로 가면 멈추므로, Gemini 요청은 네이티브에서 보낸다.
+// 읽는 동안 앱을 나가면 끝난 뒤 "영수증을 읽었어요" 알림을 띄우고, 결과는 저장해 두었다가 앱을 열면 웹이 가져간다.
+class MonoViewController: CAPBridgeViewController {
+    override open func capacitorDidLoad() {
+        bridge?.registerPluginInstance(MonoReceiptPlugin())
+    }
+}
+
+@objc(MonoReceiptPlugin)
+public class MonoReceiptPlugin: CAPPlugin, CAPBridgedPlugin {
+    public let identifier = "MonoReceiptPlugin"
+    public let jsName = "MonoReceipt"
+    public let pluginMethods: [CAPPluginMethod] = [CAPPluginMethod(name: "read", returnType: CAPPluginReturnPromise)]
+    static let resultKey = "CapacitorStorage.monoReceipt"
+
+    @objc func read(_ call: CAPPluginCall) {
+        guard let key = call.getString("key"), let prompt = call.getString("prompt"),
+              let data = call.getString("data"), let schema = call.getObject("schema") else {
+            call.reject("missing params"); return
+        }
+        let mime = call.getString("mime") ?? "image/jpeg"
+        let models = (call.getArray("models") as? [String]) ?? ["gemini-3.5-flash-lite", "gemini-3.5-flash", "gemini-flash-lite-latest"]
+        var task: UIBackgroundTaskIdentifier = .invalid
+        task = UIApplication.shared.beginBackgroundTask(withName: "monoReceipt") {
+            UIApplication.shared.endBackgroundTask(task); task = .invalid
+        }
+        func finish(_ result: [String: Any]?, _ err: String?) {
+            DispatchQueue.main.async {
+                let background = UIApplication.shared.applicationState != .active
+                if let r = result {
+                    // 웹이 멈춰 있어도 잃어버리지 않게 저장 (앱을 열면 웹이 꺼내 감)
+                    var saved = r; saved["ts"] = Int(Date().timeIntervalSince1970 * 1000)
+                    if let d = try? JSONSerialization.data(withJSONObject: saved), let s = String(data: d, encoding: .utf8) {
+                        UserDefaults.standard.set(s, forKey: MonoReceiptPlugin.resultKey)
+                    }
+                    if background { MonoReceiptPlugin.notifyDone(r) }
+                    call.resolve(["result": r])
+                } else {
+                    if background { MonoReceiptPlugin.notifyFail() }
+                    call.reject(err ?? "failed")
+                }
+                if task != .invalid { UIApplication.shared.endBackgroundTask(task); task = .invalid }
+            }
+        }
+        MonoReceiptPlugin.tryModels(models, key: key, prompt: prompt, data: data, mime: mime, schema: schema, finish: finish)
+    }
+
+    // 모델을 차례로: 붐비거나(429·5xx) 실패하면 다음 모델
+    static func tryModels(_ models: [String], key: String, prompt: String, data: String, mime: String,
+                          schema: [String: Any], finish: @escaping ([String: Any]?, String?) -> Void) {
+        guard let model = models.first else { finish(nil, "all models failed"); return }
+        let rest = Array(models.dropFirst())
+        var gen: [String: Any] = ["temperature": 0, "responseMimeType": "application/json", "responseSchema": schema]
+        if model.hasPrefix("gemini-3.") && model.contains("flash") { gen["thinkingConfig"] = ["thinkingLevel": "minimal"] }
+        let body: [String: Any] = [
+            "contents": [["role": "user", "parts": [["text": prompt], ["inline_data": ["mime_type": mime, "data": data]]]]],
+            "generationConfig": gen,
+        ]
+        guard let url = URL(string: "https://generativelanguage.googleapis.com/v1beta/models/\(model):generateContent"),
+              let payload = try? JSONSerialization.data(withJSONObject: body) else { finish(nil, "bad request"); return }
+        var req = URLRequest(url: url, timeoutInterval: rest.isEmpty ? 25 : 12)
+        req.httpMethod = "POST"
+        req.setValue("application/json", forHTTPHeaderField: "content-type")
+        req.setValue(key, forHTTPHeaderField: "x-goog-api-key")
+        req.httpBody = payload
+        URLSession.shared.dataTask(with: req) { d, resp, err in
+            let status = (resp as? HTTPURLResponse)?.statusCode ?? 0
+            if let d = d, status == 200,
+               let j = try? JSONSerialization.jsonObject(with: d) as? [String: Any],
+               let parts = ((j["candidates"] as? [[String: Any]])?.first?["content"] as? [String: Any])?["parts"] as? [[String: Any]] {
+                let text = parts.compactMap { $0["text"] as? String }.joined()
+                if let td = text.data(using: .utf8), let r = try? JSONSerialization.jsonObject(with: td) as? [String: Any] {
+                    finish(r, nil); return
+                }
+            }
+            // 키가 틀린 경우(400·401·403)는 다른 모델로 넘어가도 소용없다
+            if [400, 401, 403].contains(status) { finish(nil, "Gemini \(status)"); return }
+            tryModels(rest, key: key, prompt: prompt, data: data, mime: mime, schema: schema, finish: finish)
+        }.resume()
+    }
+
+    static func notifyDone(_ r: [String: Any]) {
+        let fmt = NumberFormatter(); fmt.numberStyle = .decimal
+        let merchant = (r["merchant"] as? String).flatMap { $0.isEmpty ? nil : $0 } ?? "영수증"
+        let total = (r["total"] as? NSNumber).map { (fmt.string(from: $0) ?? "\($0)") + "원" }
+        let readable = (r["readable"] as? Bool) ?? true
+        let c = UNMutableNotificationContent()
+        c.title = readable ? "영수증을 읽었어요" : "영수증을 읽지 못했어요"
+        c.body = readable ? ([merchant, total].compactMap { $0 }.joined(separator: " · ") + " — 눌러서 기록하기") : "다시 찍어 주세요."
+        c.sound = .default
+        c.userInfo = ["monoReceipt": true]
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "mono-receipt", content: c, trigger: nil))
+    }
+    static func notifyFail() {
+        let c = UNMutableNotificationContent()
+        c.title = "영수증을 읽지 못했어요"; c.body = "잠시 뒤 다시 시도해 주세요."; c.sound = .default
+        UNUserNotificationCenter.current().add(UNNotificationRequest(identifier: "mono-receipt", content: c, trigger: nil))
+    }
+}

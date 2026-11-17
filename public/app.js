@@ -322,6 +322,19 @@ function countTo(target){
 // iOS 쪽이 Preferences(monoPending)에 쌓아 둔 결제를 읽어서 기록한다.
 // approved: 알림에서 [기록]을 누름 → 바로 기록 / review·pending: 앱 안에서 다시 묻기 / ignored: 버림
 const nativePrefs = ()=> window.Capacitor?.isNativePlatform?.() && window.Capacitor.Plugins?.Preferences;
+// 영수증을 읽는 동안 앱을 나갔다가 돌아오면: 네이티브가 저장해 둔 결과를 입력칸에 채운다
+async function takeSavedReceipt(){
+  const P = nativePrefs();
+  if(!P || $("cam").classList.contains("busy")) return; // 아직 읽는 중이면 그쪽이 직접 채운다
+  const { value } = await P.get({ key:"monoReceipt" }).catch(()=>({}));
+  if(!value) return;
+  await P.remove({ key:"monoReceipt" }).catch(()=>{});
+  let r; try{ r = JSON.parse(value); }catch{ return; }
+  if(Date.now() - (r.ts||0) > 15*60*1000) return;
+  if(r.readable===false || !(r.total>0)) return flash("영수증 금액을 읽지 못했어요. 다시 찍어 주세요.");
+  q.value = receiptLine({ merchant:r.merchant, total:Math.round(r.total), date:/^\d{4}-\d{2}-\d{2}$/.test(r.date||"") ? r.date : "", payment:r.payment||"" });
+  preview(); q.focus();
+}
 async function readPending(P){ const {value} = await P.get({key:"monoPending"}); try{ return JSON.parse(value||"[]"); }catch(e){ return []; } }
 async function recordParsed(r, x){
   if(r.cancel || !(r.total>0)) return null;
@@ -333,8 +346,8 @@ async function recordParsed(r, x){
   if(method){ it.p = method.id; it.pn = method.name; }
   (S.months[d.slice(0,7)] ||= []).push(it);
   await api("POST","items",it);
-  // Gemini가 없으면 기억해 둔 상호로 분류 보강
-  if(!S.ai) understandItem(it, {raw:`${memo} ${r.total}`, memo, type:it.t, cat:null, methodGuessed:false, unregistered:false});
+  // 규칙으로 빠르게 읽었거나 Gemini가 없으면: 기록은 먼저 하고, 분류·상호는 뒤에서 보강 (기억해 둔 상호 → Gemini)
+  if(r.rule || !S.ai) understandItem(it, {raw:`${memo} ${r.total}`, memo, type:it.t, cat:null, methodGuessed:false, unregistered:false});
   return it;
 }
 let syncing = false;
@@ -349,7 +362,7 @@ async function syncPending(){
     noteLinks(q);
     const added = [];
     for(const x of q.filter(x=>x.status==="approved")){
-      const it = await recordParsed(await api("POST","payment/parse",{text:x.text}), x);
+      const it = await recordParsed(await api("POST","payment/parse",{text:x.text, fast:true}), x);
       if(it) added.push(it);
     }
     const ask = q.filter(x=>x.status==="review" || x.status==="pending");
@@ -377,7 +390,7 @@ function noteLinks(q){
 async function askPayments(list){
   if(list.length > 1) return askPaymentsBulk(list);
   const x = list[0]; if(!x) return;
-  const r = await api("POST","payment/parse",{text:x.text});
+  const r = await api("POST","payment/parse",{text:x.text, fast:true});
   const next = ()=>{ closeAS(); setTimeout(()=>askPayments(list.slice(1)), 250); };
   if(r.cancel || !(r.total>0)) return askPayments(list.slice(1));
   const as = showAS(`<div class="g"><div class="h"></div><div class="pay-ask"></div>
@@ -391,7 +404,7 @@ async function askPayments(list){
 async function askPaymentsBulk(list){
   const rows = [];
   for(const x of list){
-    const r = await api("POST","payment/parse",{text:x.text});
+    const r = await api("POST","payment/parse",{text:x.text, fast:true});
     if(!r.cancel && r.total>0) rows.push({x, r, on:true});
   }
   if(rows.length <= 1) return rows.length ? askPayments([rows[0].x]) : undefined;
@@ -424,7 +437,7 @@ async function askPaymentsBulk(list){
   $("pbNo").onclick = closeAS;
 }
 window.addEventListener("monoPending", ()=>syncPending());
-document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible") syncPending(); });
+document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible"){ syncPending(); takeSavedReceipt(); } });
 
 /* ---------- 시작 애니메이션 ---------- */
 let appReady = false;
@@ -494,7 +507,7 @@ function splashNone(logoImg, finish){
     const els = [logoImg, document.querySelector(".field"), $("ai"), document.querySelector(".foot")];
     if(reduce) return finish();
     els.forEach((el,k)=>el?.animate([{opacity:0,transform:"translateY(12px)"},{opacity:1,transform:"none"}],{duration:DUR,delay:k*GAP,easing:E,fill:"backwards"}));
-    document.documentElement.classList.add("splash-done"); syncPending();
+    document.documentElement.classList.add("splash-done"); syncPending(); setTimeout(takeSavedReceipt, GAP*4 + DUR);
     setTimeout(()=>q.focus(), GAP + DUR); // 입력창 움직임이 끝난 뒤
   };
   requestAnimationFrame(wait);
@@ -520,16 +533,16 @@ function splashFade(sp, logoImg, finish){
 }
 
 /* ---------- 영수증 ---------- */
-// 사진을 줄여서(긴 변 1600px JPEG) Gemini에 보낸다
+// 사진을 줄여서(긴 변 1280px JPEG) Gemini에 보낸다: 글자는 충분히 읽히고 올리는 양은 절반 가까이 줄어든다
 async function shrinkImage(file){
   const url = URL.createObjectURL(file);
   try{
     const img = await new Promise((ok,no)=>{ const i=new Image(); i.onload=()=>ok(i); i.onerror=no; i.src=url; });
-    const k = Math.min(1, 1600/Math.max(img.naturalWidth, img.naturalHeight));
+    const k = Math.min(1, 1280/Math.max(img.naturalWidth, img.naturalHeight));
     const c = document.createElement("canvas");
     c.width = Math.round(img.naturalWidth*k); c.height = Math.round(img.naturalHeight*k);
     c.getContext("2d").drawImage(img, 0, 0, c.width, c.height);
-    return { mime:"image/jpeg", data: c.toDataURL("image/jpeg", .85).split(",")[1] };
+    return { mime:"image/jpeg", data: c.toDataURL("image/jpeg", .75).split(",")[1] };
   } finally { URL.revokeObjectURL(url); }
 }
 // 읽은 결과를 입력칸에 한 줄로: 확인하고 ✓를 누르면 기록
