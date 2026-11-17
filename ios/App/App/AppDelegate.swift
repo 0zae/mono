@@ -225,7 +225,7 @@ class MonoViewController: CAPBridgeViewController {
     }
 }
 
-@objc(MonoReceiptPlugin)
+@objc(MonoReceipt) // JS가 부르는 이름과 같게: 등록이 안 돼도 이 이름으로 찾아 쓸 수 있다
 public class MonoReceiptPlugin: CAPPlugin, CAPBridgedPlugin {
     public let identifier = "MonoReceiptPlugin"
     public let jsName = "MonoReceipt"

@@ -8,7 +8,7 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         guard let windowScene = scene as? UIWindowScene else { return }
 
         window = UIWindow(windowScene: windowScene)
-        let root = CAPBridgeViewController()
+        let root = MonoViewController() // 영수증 읽기 플러그인을 등록하는 Mono 전용 화면
         window?.rootViewController = root
         // 키보드가 올라와 웹 화면이 줄어들 때 그 뒤로 보이는 바탕: 앱 배경과 같은 색(라이트 흰색, 다크 검정)
         window?.backgroundColor = .systemBackground
