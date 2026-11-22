@@ -223,6 +223,7 @@ async function load(){
 const q=$("q"), under=$("under"), go=$("go");
 let draft=null, lastAdded=null, flashTimer;
 function preview(){
+  $("qClr").hidden = !q.value; // 글자가 있을 때만 전부 지우기 버튼
   draft = parse(q.value);
   go.hidden = !(draft && draft.amount>0);
   // 한글 조합 중에 iOS가 글자를 잠깐 지웠다 다시 넣는 순간(예: '엊' → '어제')이 있어서,
@@ -243,6 +244,9 @@ function preview(){
   else under.classList.remove("enter");
 }
 q.addEventListener("input", ()=>{ lastAdded=null; preview(); });
+// 첫 화면 입력창: 전부 지우기
+$("qClr").addEventListener("pointerdown", e=>e.preventDefault()); // 눌러도 키보드가 내려가지 않게
+$("qClr").onclick=()=>{ q.value=""; q.dispatchEvent(new Event("input")); q.focus(); };
 // 첫 화면의 빈 곳을 누르면 키보드 내리기
 document.querySelector(".home").addEventListener("pointerdown", e=>{ if(!e.target.closest("form, button, a")) q.blur(); });
 // 글로 적은 한 줄을 기록 (입력칸과 같은 규칙) — 단축어 "빠른 기록"으로 들어온 것도 이걸로
@@ -264,7 +268,7 @@ $("form").addEventListener("submit", e=>{
   const ym = it.d.slice(0,7);
   (S.months[ym] ||= []).push(it);
   const d = draft;
-  clearTimeout(preview.clr); q.value=""; go.hidden=true; $("cam").hidden=false; lastAdded=it;
+  clearTimeout(preview.clr); q.value=""; go.hidden=true; $("cam").hidden=false; $("qClr").hidden=true; lastAdded=it;
   showDone(it, !d.cat);
   renderHome(); if(sheetOpen) renderSheet();
   api("POST","items",it).then(()=>understandItem(it, d)).catch(fail);
@@ -593,6 +597,44 @@ $("camFile").addEventListener("change", async e=>{
 
 /* ---------- edits ---------- */
 function find(id){ for(const ym in S.months){ const i=S.months[ym].findIndex(x=>x.id===id); if(i>-1) return [ym,i]; } return [null,-1]; }
+// 날짜 바꾸기: 달이 바뀌면 그 달 목록으로 옮긴다
+// Mono 스타일 날짜 고르기: 오늘·어제·그제 바로 고르기 + 내역 달력과 같은 모양의 달력 (미래는 못 고름)
+function openDatePicker(cur, onPick, onCancel){
+  let sel = cur, ym = cur.slice(0,7);
+  const as = showAS(`<form class="g" id="dpForm"><div class="dp-head"><b id="dpTitle"></b></div>
+    <div class="dp-nav"><button type="button" id="dpPrev" aria-label="이전 달"><svg width="8" height="13" viewBox="0 0 10 16" aria-hidden="true"><path d="M7.5 2 1.5 8l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button type="button" id="dpNext" aria-label="다음 달"><svg width="8" height="13" viewBox="0 0 10 16" aria-hidden="true"><path d="M2.5 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div>
+    <div class="dp-wk">${WD.map(w=>`<span>${w}</span>`).join("")}</div><div class="dp-grid" id="dpGrid"></div>
+    <button class="btn b" type="submit" id="dpOk"></button></form><div class="g"><button class="btn b" type="button" id="dpCancel">취소</button></div>`);
+  const draw = ()=>{
+    const [y,m] = ym.split("-").map(Number), first = new Date(y,m-1,1).getDay(), dim = daysIn(ym);
+    $("dpTitle").textContent = `${y}년 ${m}월`;
+    let h = ""; for(let i=0;i<first;i++) h += `<span></span>`;
+    for(let d=1; d<=dim; d++){ const ds=`${ym}-${String(d).padStart(2,"0")}`;
+      h += `<button type="button" class="dp-d${ds===TODAY?" today":""}${ds===sel?" sel":""}" data-d="${ds}" ${ds>TODAY?"disabled":""}><span>${d}</span></button>`; }
+    $("dpGrid").innerHTML = h;
+    $("dpNext").disabled = ym >= THIS_YM;
+    const [, sm, sd] = sel.split("-").map(Number);
+    $("dpOk").textContent = sel===cur ? "닫기" : `${sm}월 ${sd}일로 바꾸기`;
+  };
+  $("dpGrid").addEventListener("click", e=>{ const b=e.target.closest("[data-d]"); if(b && !b.disabled){ sel=b.dataset.d; draw(); } });
+  $("dpPrev").onclick=()=>{ ym=shiftYm(ym,-1); draw(); };
+  $("dpNext").onclick=()=>{ if(ym<THIS_YM){ ym=shiftYm(ym,1); draw(); } };
+  // X 없이: 바깥을 누르면 편집 창으로 돌아간다
+  as.querySelector(".pop-x")?.remove();
+  const done = fn=>()=>{ $("scrim2").onclick = closeAS; fn(); };
+  $("scrim2").onclick = done(onCancel);
+  $("dpForm").onsubmit=e=>{ e.preventDefault(); done(()=>onPick(sel))(); };
+  $("dpCancel").onclick=done(onCancel);
+  draw();
+}
+function moveDate(id, d){
+  const [ym,i]=find(id); if(!ym) return;
+  const it=S.months[ym][i]; it.d=d;
+  const nym=d.slice(0,7);
+  if(nym!==ym){ S.months[ym].splice(i,1); (S.months[nym] ||= []).push(it); }
+  api("PATCH","items/"+id,{d}).catch(fail);
+  renderHome(); if(sheetOpen) renderSheet();
+}
 function update(id, patch, learn){
   const [ym,i]=find(id); if(!ym) return;
   Object.assign(S.months[ym][i],patch);
@@ -853,7 +895,7 @@ let filter = null, listScroll = 0;
 let searchQ = "";
 function renderSearch(){
   $("scroll").innerHTML = `<h1>검색</h1>
-    <label class="search-in"><svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true"><circle cx="7.2" cy="7.2" r="5.7" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M11.4 11.4 15.6 15.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg><input id="sq" type="search" enterkeyhint="search" autocomplete="off" placeholder="가게, 카테고리, 결제수단, 금액" aria-label="내역 검색"><button class="clr" id="sqClr" type="button" aria-label="지우기" hidden>✕</button></label>
+    <label class="search-in"><svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true"><circle cx="7.2" cy="7.2" r="5.7" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M11.4 11.4 15.6 15.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg><input id="sq" type="search" enterkeyhint="search" autocomplete="off" placeholder="가게, 카테고리, 결제수단, 금액" aria-label="내역 검색"><button class="clr" id="sqClr" type="button" aria-label="지우기" hidden><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></label>
     <div id="sres"></div>`;
   const inp=$("sq"), clr=$("sqClr");
   inp.value = searchQ;
@@ -1118,6 +1160,22 @@ function showAS(html){
 }
 // 팝업이 닫힐 때 한 번 할 일 (예: 고친 이름 저장) — 어떤 방법으로 닫혀도
 let asBeforeClose=null;
+// 팝업 내용 바꾸기를 이어지는 움직임으로: 창 높이는 부드럽게 바뀌고, 새 내용은 옆(dir)에서 밀려 들어온다
+function swapAS(render, dir){
+  const as=$("as"), reduce=matchMedia("(prefers-reduced-motion: reduce)").matches;
+  const h0=as.offsetHeight, old=as.firstElementChild?.cloneNode(true);
+  render();
+  if(reduce || !as.classList.contains("on")) return;
+  const h1=as.offsetHeight, E="cubic-bezier(.32,.72,0,1)";
+  as.style.overflow="hidden";
+  as.animate([{height:h0+"px"},{height:h1+"px"}],{duration:360, easing:E}).onfinish=()=>{ as.style.overflow=""; };
+  // 나가는 내용: 반대쪽으로 살짝 밀리며 사라짐 (복제본을 위에 겹쳐서)
+  if(old){
+    old.style.cssText="position:absolute;left:0;right:0;top:0;pointer-events:none"; as.appendChild(old);
+    old.animate([{opacity:1, transform:"none"},{opacity:0, transform:`translateX(${-dir*24}px)`}],{duration:220, easing:E, fill:"forwards"}).onfinish=()=>old.remove();
+  }
+  as.firstElementChild?.animate([{opacity:0, transform:`translateX(${dir*24}px)`},{opacity:1, transform:"none"}],{duration:340, delay:60, easing:E, fill:"backwards"});
+}
 function closeAS(){ const f=asBeforeClose; asBeforeClose=null; f?.(); $("as").classList.remove("on"); $("scrim2").classList.remove("on"); }
 $("scrim2").onclick=closeAS;
 // 시트 안에서 입력칸을 누르면 그 칸이 보이게
@@ -1202,13 +1260,16 @@ $("scroll").addEventListener("click", e=>{
 });
 function openTx(id){
   const [ym,i]=find(id); if(!ym) return; const it=S.months[ym][i];
-  const as = showAS(`<div class="g"><div class="t-meta"></div>
+  const as = showAS(`<div class="g"><button type="button" class="t-meta" id="tDateBtn" aria-label="날짜 바꾸기"><span class="t-date"></span><svg width="9" height="6" viewBox="0 0 9 6" aria-hidden="true"><path d="M1 1l3.5 3.5L8 1" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round"/></svg></button>
     <label class="t-amt ${it.t}"><span class="sign">${it.t==="in"?"+":""}</span><input id="tAmt" class="num" inputmode="numeric" enterkeyhint="done" autocomplete="off" aria-label="금액"><span class="won">원</span></label>
     <div class="fields"><input id="tName" maxlength="40" enterkeyhint="done" autocomplete="off" aria-label="내역 이름"></div>
     <div class="sub">카테고리</div><div class="chips">${allCats().map(c=>`<button data-c="${esc(c)}" class="${c===it.c?"sel":""}"><i style="background:${c===it.c?"#fff":color(c)}"></i>${esc(c)}</button>`).join("")}</div>
     <div class="sub">결제수단</div><div class="chips">${S.methods.map(m=>`<button data-p="${m.id}" class="${m.id===it.p?"sel":""}"></button>`).join("")}</div>
     <button class="btn red" id="asDel">삭제</button></div><div class="g"><button class="btn b" id="asCancel">닫기</button></div>`);
-  as.querySelector(".t-meta").textContent = dayLabel(it.d);
+  // 날짜: 맨 위 날짜를 누르면 Mono 달력 창 → 고르면 다시 이 편집 창으로
+  as.querySelector(".t-date").textContent = dayLabel(it.d);
+  $("tDateBtn").onclick=()=>{ saveName(); asBeforeClose=null;
+    swapAS(()=>openDatePicker(it.d, d=>{ if(d!==it.d) moveDate(id, d); swapAS(()=>openTx(id), -1); }, ()=>swapAS(()=>openTx(id), -1)), 1); };
   // 금액(크게)·이름: 바로 고칠 수 있게. 창을 닫거나 다른 걸 고를 때 함께 저장
   const name=$("tName"), amt=$("tAmt"); name.value=it.m;
   // 입력칸 폭을 글자 폭에 딱 맞춰서 "원"이 숫자 바로 뒤에 붙게

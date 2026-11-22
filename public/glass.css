@@ -122,3 +122,8 @@ html[data-skin="liquid"] .as .pb-list{background:var(--ctl);box-shadow:var(--lg-
 html[data-skin="liquid"] .as .gs{background:rgba(255,255,255,.35)}
 html[data-skin="liquid"] .as .gs-row,html[data-skin="liquid"] .as .gs-search,html[data-skin="liquid"] .as .gs-act{background:var(--ctl)}
 html[data-skin="liquid"] .as .sub,html[data-skin="liquid"] .as .hint-line{color:var(--label2)}
+
+/* 날짜 바꾸기 창: 월 이동 버튼도 유리 */
+html[data-skin="liquid"] .as .dp-nav button{background:var(--ctl);box-shadow:var(--lg-rim),var(--ctl-drop);-webkit-backdrop-filter:var(--lg-blur);backdrop-filter:var(--lg-blur)}
+
+html[data-skin="liquid"] .field .qclr{margin:0 8px 0 4px}

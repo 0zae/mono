@@ -72,6 +72,21 @@ struct GlassRim: ViewModifier {
     }
 }
 
+// 앱 입력창 왼쪽의 '펜 + 밑줄' 아이콘 (24×24 기준)
+struct PenIcon: Shape {
+    func path(in r: CGRect) -> Path {
+        let k = min(r.width, r.height) / 24
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x * k, y: r.minY + y * k) }
+        var path = Path()
+        path.move(to: p(12, 20)); path.addLine(to: p(20, 20)) // 밑줄
+        // 펜: 둥근 머리 → 몸통 → 뾰족한 끝
+        path.move(to: p(15.5, 4.5))
+        path.addArc(center: p(17, 6), radius: 2.1 * k, startAngle: .degrees(225), endAngle: .degrees(45), clockwise: false)
+        path.addLine(to: p(8, 18)); path.addLine(to: p(4, 19)); path.addLine(to: p(5, 15)); path.closeSubpath()
+        return path
+    }
+}
+
 // 앱 입력창 오른쪽의 스캔 아이콘과 같은 모양 (네 귀퉁이 틀 + 글줄 세 개, 21×21 기준)
 struct ScanIcon: Shape {
     func path(in r: CGRect) -> Path {
@@ -141,7 +156,10 @@ struct HomeBarView: View {
             HStack(spacing: 8) {
                 Link(destination: quickURL) {
                     HStack(spacing: 8) {
-                        Image(systemName: "magnifyingglass").foregroundStyle(.secondary)
+                        PenIcon() // 앱 입력창과 같은 '펜 + 밑줄' 아이콘
+                            .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                            .foregroundStyle(.secondary)
+                            .frame(width: 18, height: 18)
                         Text("기록하기").foregroundStyle(.secondary)
                         Spacer(minLength: 0)
                     }
