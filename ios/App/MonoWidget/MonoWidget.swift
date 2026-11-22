@@ -72,6 +72,25 @@ struct GlassRim: ViewModifier {
     }
 }
 
+// 앱 입력창 오른쪽의 스캔 아이콘과 같은 모양 (네 귀퉁이 틀 + 글줄 세 개, 21×21 기준)
+struct ScanIcon: Shape {
+    func path(in r: CGRect) -> Path {
+        let k = min(r.width, r.height) / 21
+        func p(_ x: CGFloat, _ y: CGFloat) -> CGPoint { CGPoint(x: r.minX + x * k, y: r.minY + y * k) }
+        var path = Path()
+        // 귀퉁이 네 개 (모서리 반지름 2.5)
+        path.move(to: p(2, 7)); path.addLine(to: p(2, 4.5)); path.addArc(tangent1End: p(2, 2), tangent2End: p(4.5, 2), radius: 2.5 * k); path.addLine(to: p(7, 2))
+        path.move(to: p(14, 2)); path.addLine(to: p(16.5, 2)); path.addArc(tangent1End: p(19, 2), tangent2End: p(19, 4.5), radius: 2.5 * k); path.addLine(to: p(19, 7))
+        path.move(to: p(19, 14)); path.addLine(to: p(19, 16.5)); path.addArc(tangent1End: p(19, 19), tangent2End: p(16.5, 19), radius: 2.5 * k); path.addLine(to: p(14, 19))
+        path.move(to: p(7, 19)); path.addLine(to: p(4.5, 19)); path.addArc(tangent1End: p(2, 19), tangent2End: p(2, 16.5), radius: 2.5 * k); path.addLine(to: p(2, 14))
+        // 글줄 세 개
+        path.move(to: p(6.5, 8)); path.addLine(to: p(14.5, 8))
+        path.move(to: p(6.5, 10.5)); path.addLine(to: p(14.5, 10.5))
+        path.move(to: p(6.5, 13)); path.addLine(to: p(11.5, 13))
+        return path
+    }
+}
+
 // ---------- A · 주황 한 칸 ----------
 struct QuickTileView: View {
     let theme: MonoTheme
@@ -114,11 +133,11 @@ struct HomeBarView: View {
         let full = mode == .fullColor
         let liquid = theme == .liquid && full
         VStack(spacing: 14) {
-            Group {
-                if full { Image("Logo").resizable().scaledToFit() }
-                else { Image("LogoGlyph").resizable().scaledToFit().widgetAccentable() }
-            }
-            .frame(height: 26)
+            // 앱 첫 화면과 같은 로고: 박스 없이 주황 글자만 (색조 모드에서는 iOS 색으로)
+            Image("LogoGlyph").resizable().scaledToFit()
+                .foregroundStyle(full ? AnyShapeStyle(monoOrange) : AnyShapeStyle(.primary))
+                .widgetAccentable()
+                .frame(height: 30)
             HStack(spacing: 8) {
                 Link(destination: quickURL) {
                     HStack(spacing: 8) {
@@ -130,10 +149,11 @@ struct HomeBarView: View {
                     .frame(maxHeight: .infinity)
                 }
                 Link(destination: scanURL) {
-                    Image(systemName: "doc.viewfinder")
-                        .font(.system(size: 18))
+                    ScanIcon()
+                        .stroke(style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
                         .foregroundStyle(full ? AnyShapeStyle(monoOrange) : AnyShapeStyle(.primary))
                         .widgetAccentable()
+                        .frame(width: 21, height: 21)
                         .frame(width: 36, height: 36)
                 }
             }
