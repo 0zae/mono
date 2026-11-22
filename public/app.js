@@ -244,6 +244,15 @@ function preview(){
 q.addEventListener("input", ()=>{ lastAdded=null; preview(); });
 // 첫 화면의 빈 곳을 누르면 키보드 내리기
 document.querySelector(".home").addEventListener("pointerdown", e=>{ if(!e.target.closest("form, button, a")) q.blur(); });
+// 글로 적은 한 줄을 기록 (입력칸과 같은 규칙) — 단축어 "빠른 기록"으로 들어온 것도 이걸로
+function recordText(text, ts){
+  const d = parse(text); if(!d || !(d.amount>0)) return null;
+  const it = {id:uid(), ts:ts||Date.now(), d:d.date, t:d.type, a:d.amount, c:d.cat||FALLBACK, m:d.memo, r:d.raw};
+  if(d.method){ it.p = d.method.id; it.pn = d.method.name; }
+  (S.months[it.d.slice(0,7)] ||= []).push(it);
+  api("POST","items",it).then(()=>understandItem(it, d)).catch(fail);
+  return it;
+}
 $("form").addEventListener("submit", e=>{
   e.preventDefault();
   if(!q.value.trim()){ q.blur(); return; } // 빈 칸에서 ✓: 키보드 내리기
@@ -361,6 +370,7 @@ async function syncPending(){
     const handled = new Set(q.map(x=>x.id));
     noteLinks(q);
     const added = [];
+    for(const x of q.filter(x=>x.status==="input")){ const it = recordText(x.text, x.ts); if(it) added.push(it); }
     for(const x of q.filter(x=>x.status==="approved")){
       const it = await recordParsed(await api("POST","payment/parse",{text:x.text, fast:true}), x);
       if(it) added.push(it);
@@ -437,6 +447,16 @@ async function askPaymentsBulk(list){
   $("pbNo").onclick = closeAS;
 }
 window.addEventListener("monoPending", ()=>syncPending());
+// 아이콘 길게 누르기 메뉴: 빠른 기록 → 입력칸 / 영수증 스캔 → 카메라·사진 고르기
+async function takeQuickAction(){
+  const P = nativePrefs(); if(!P || !document.documentElement.classList.contains("splash-done")) return;
+  const { value } = await P.get({ key:"monoAction" }).catch(()=>({}));
+  if(!value) return;
+  await P.remove({ key:"monoAction" }).catch(()=>{});
+  if(sheetOpen) closeSheet();
+  if(value==="scan") $("camFile").click(); else q.focus();
+}
+window.addEventListener("monoAction", ()=>takeQuickAction());
 document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState==="visible"){ syncPending(); takeSavedReceipt(); } });
 
 /* ---------- 시작 애니메이션 ---------- */
@@ -507,7 +527,7 @@ function splashNone(logoImg, finish){
     const els = [logoImg, document.querySelector(".field"), $("ai"), document.querySelector(".foot")];
     if(reduce) return finish();
     els.forEach((el,k)=>el?.animate([{opacity:0,transform:"translateY(12px)"},{opacity:1,transform:"none"}],{duration:DUR,delay:k*GAP,easing:E,fill:"backwards"}));
-    document.documentElement.classList.add("splash-done"); syncPending(); setTimeout(takeSavedReceipt, GAP*4 + DUR);
+    document.documentElement.classList.add("splash-done"); syncPending(); setTimeout(takeSavedReceipt, GAP*4 + DUR); setTimeout(takeQuickAction, GAP + DUR + 50);
     setTimeout(()=>q.focus(), GAP + DUR); // 입력창 움직임이 끝난 뒤
   };
   requestAnimationFrame(wait);
@@ -975,7 +995,9 @@ function showAS(html){
   $("scrim2").classList.add("on"); as.classList.add("on");
   return as;
 }
-function closeAS(){ $("as").classList.remove("on"); $("scrim2").classList.remove("on"); }
+// 팝업이 닫힐 때 한 번 할 일 (예: 고친 이름 저장) — 어떤 방법으로 닫혀도
+let asBeforeClose=null;
+function closeAS(){ const f=asBeforeClose; asBeforeClose=null; f?.(); $("as").classList.remove("on"); $("scrim2").classList.remove("on"); }
 $("scrim2").onclick=closeAS;
 // 시트 안에서 입력칸을 누르면 그 칸이 보이게
 $("as").addEventListener("focusin", e=>{ setTimeout(()=>e.target.scrollIntoView({block:"nearest"}), 300); });
@@ -1059,13 +1081,19 @@ $("scroll").addEventListener("click", e=>{
 function openTx(id){
   const [ym,i]=find(id); if(!ym) return; const it=S.months[ym][i];
   const as = showAS(`<div class="g"><div class="h"></div>
+    <div class="fields"><input id="tName" maxlength="40" enterkeyhint="done" autocomplete="off" aria-label="내역 이름"></div>
     <div class="sub">카테고리</div><div class="chips">${allCats().map(c=>`<button data-c="${esc(c)}" class="${c===it.c?"sel":""}"><i style="background:${c===it.c?"#fff":color(c)}"></i>${esc(c)}</button>`).join("")}</div>
     <div class="sub">결제수단</div><div class="chips">${S.methods.map(m=>`<button data-p="${m.id}" class="${m.id===it.p?"sel":""}"></button>`).join("")}</div>
     <button class="btn red" id="asDel">삭제</button></div><div class="g"><button class="btn b" id="asCancel">닫기</button></div>`);
-  as.querySelector(".h").textContent = `${it.m} · ${won(it.a)}원 · ${dayLabel(it.d)}`;
-  as.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ update(id,{c:b.dataset.c,t:b.dataset.c===INCOME?"in":"out"},true); closeAS(); });
-  as.querySelectorAll("[data-p]").forEach(b=>{ const m=methodById(b.dataset.p); b.textContent=m.name; b.onclick=()=>{ update(id,{p:m.id,pn:m.name}); closeAS(); }; });
-  $("asDel").onclick=()=>{ remove(id); closeAS(); };
+  as.querySelector(".h").textContent = `${it.t==="in"?"+":""}${won(it.a)}원 · ${dayLabel(it.d)}`;
+  // 이름: 바로 고칠 수 있게. 창을 닫거나 다른 걸 고를 때 함께 저장
+  const name=$("tName"); name.value=it.m;
+  const saveName=()=>{ const v=name.value.trim(); if(v && v!==it.m) update(id,{m:v}); };
+  asBeforeClose = saveName;
+  name.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); closeAS(); } });
+  as.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ saveName(); update(id,{c:b.dataset.c,t:b.dataset.c===INCOME?"in":"out"},true); closeAS(); });
+  as.querySelectorAll("[data-p]").forEach(b=>{ const m=methodById(b.dataset.p); b.textContent=m.name; b.onclick=()=>{ saveName(); update(id,{p:m.id,pn:m.name}); closeAS(); }; });
+  $("asDel").onclick=()=>{ asBeforeClose=null; remove(id); closeAS(); };
   $("asCancel").onclick=closeAS;
 }
 function openMethod(mid){

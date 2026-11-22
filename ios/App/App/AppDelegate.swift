@@ -2,6 +2,7 @@ import UIKit
 import Capacitor
 import UserNotifications
 import AppIntents
+import SwiftUI
 
 @UIApplicationMain
 class AppDelegate: UIResponder, UIApplicationDelegate, UNUserNotificationCenterDelegate {
@@ -97,10 +98,10 @@ enum MonoPending {
             UserDefaults.standard.set(s, forKey: key)
         }
     }
-    static func add(text: String) -> String {
+    static func add(text: String, status: String = "pending") -> String {
         let id = UUID().uuidString
         var a = load()
-        a.append(["id": id, "text": text, "ts": Int(Date().timeIntervalSince1970 * 1000), "status": "pending"])
+        a.append(["id": id, "text": text, "ts": Int(Date().timeIntervalSince1970 * 1000), "status": status])
         save(a)
         return id
     }
@@ -209,10 +210,67 @@ struct RecordPaymentIntent: AppIntent {
     }
 }
 
+// 단축어 동작: "Mono 빠른 기록" — 입력 창("방금 쓴 돈")에 적으면 앱을 열지 않고 기록
+// 동작 버튼·뒷면 탭·제어 센터·잠금 화면·시리·검색 어디서든 부를 수 있다
 @available(iOS 16.0, *)
+struct QuickRecordIntent: AppIntent {
+    static var title: LocalizedStringResource = "Mono 빠른 기록"
+    static var description = IntentDescription("방금 쓴 돈을 적으면 앱을 열지 않고 Mono에 기록해요. 예: 김밥 8500")
+    static var openAppWhenRun: Bool = false
+
+    @Parameter(title: "방금 쓴 돈", requestValueDialog: IntentDialog("방금 쓴 돈"))
+    var text: String
+
+    func perform() async throws -> some IntentResult & ShowsSnippetView {
+        let t = text.trimmingCharacters(in: .whitespacesAndNewlines)
+        guard let (name, amount) = QuickRecordIntent.split(t) else {
+            return .result(view: QuickSnippet(title: "금액을 함께 적어 주세요", line: "예: 김밥 8500"))
+        }
+        _ = MonoPending.add(text: t, status: "input") // 기록은 앱의 입력 규칙으로 (앱이 열리거나 이미 열려 있으면 바로)
+        MonoPending.pingWeb()
+        return .result(view: QuickSnippet(title: "기록했어요", line: [name, amount].filter { !$0.isEmpty }.joined(separator: " ")))
+    }
+
+    // "김밥 8500", "점심 9천", "택시 1.2만원" → ("김밥", "8,500원")
+    static func split(_ t: String) -> (String, String)? {
+        guard let re = try? NSRegularExpression(pattern: "(\\d[\\d,]*(?:\\.\\d+)?)\\s*(만|천)?\\s*원?"),
+              let m = re.matches(in: t, range: NSRange(t.startIndex..., in: t)).last,
+              let r = Range(m.range, in: t), let nr = Range(m.range(at: 1), in: t) else { return nil }
+        var v = Double(t[nr].replacingOccurrences(of: ",", with: "")) ?? 0
+        if let ur = Range(m.range(at: 2), in: t) { v *= t[ur] == "만" ? 10000 : 1000 }
+        guard v >= 1 else { return nil }
+        let fmt = NumberFormatter(); fmt.numberStyle = .decimal
+        let name = t.replacingCharacters(in: r, with: " ").split(separator: " ").joined(separator: " ")
+        return (name, (fmt.string(from: NSNumber(value: Int(v.rounded()))) ?? "\(Int(v))") + "원")
+    }
+}
+
+// 기록한 뒤 잠깐 뜨는 결과 카드 (가 · 한 줄)
+struct QuickSnippet: View {
+    let title: String, line: String
+    var body: some View {
+        HStack(spacing: 12) {
+            RoundedRectangle(cornerRadius: 9, style: .continuous)
+                .fill(Color(red: 1, green: 90/255, blue: 46/255))
+                .frame(width: 36, height: 36)
+                .overlay(Text("m").font(.system(size: 17, weight: .heavy)).foregroundStyle(.white))
+            VStack(alignment: .leading, spacing: 2) {
+                Text(title).font(.subheadline.weight(.semibold))
+                Text(line).font(.footnote).foregroundStyle(.secondary).lineLimit(1)
+            }
+            Spacer(minLength: 0)
+        }
+        .padding(.horizontal, 16).padding(.vertical, 12)
+    }
+}
+
+@available(iOS 17.0, *)
 struct MonoShortcuts: AppShortcutsProvider {
     static var appShortcuts: [AppShortcut] {
-        AppShortcut(intent: RecordPaymentIntent(), phrases: ["\(.applicationName)에 결제 보내기"])
+        AppShortcut(intent: QuickRecordIntent(), phrases: ["\(.applicationName) 빠른 기록", "\(.applicationName)에 기록하기"],
+                    shortTitle: "빠른 기록", systemImageName: "plus.circle")
+        AppShortcut(intent: RecordPaymentIntent(), phrases: ["\(.applicationName)에 결제 보내기"],
+                    shortTitle: "결제 보내기", systemImageName: "creditcard")
     }
 }
 

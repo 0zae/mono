@@ -1,6 +1,27 @@
 import UIKit
 import Capacitor
 
+// 아이콘 길게 누르기 메뉴: 고른 동작을 저장해 두고 웹에 알린다 (웹이 입력칸 포커스 / 스캔을 연다)
+enum MonoQuickAction {
+    static let key = "CapacitorStorage.monoAction"
+    static func handle(_ item: UIApplicationShortcutItem) { handle(action: item.type.hasSuffix(".scan") ? "scan" : "quick") }
+    // 위젯: mono://quick, mono://scan
+    static func handle(url: URL) -> Bool {
+        guard url.scheme == "mono", let h = url.host, h == "quick" || h == "scan" else { return false }
+        handle(action: h); return true
+    }
+    static func handle(action: String) {
+        UserDefaults.standard.set(action, forKey: key)
+        DispatchQueue.main.asyncAfter(deadline: .now() + 0.3) {
+            for scene in UIApplication.shared.connectedScenes {
+                if let ws = scene as? UIWindowScene, let vc = ws.windows.first?.rootViewController as? CAPBridgeViewController {
+                    vc.bridge?.triggerWindowJSEvent(eventName: "monoAction")
+                }
+            }
+        }
+    }
+}
+
 class SceneDelegate: UIResponder, UIWindowSceneDelegate {
     var window: UIWindow?
 
@@ -16,9 +37,18 @@ class SceneDelegate: UIResponder, UIWindowSceneDelegate {
         window?.makeKeyAndVisible()
 
         SceneDelegateProxy.shared.scene(scene, willConnectTo: session, options: connectionOptions)
+        if let item = connectionOptions.shortcutItem { MonoQuickAction.handle(item) }
+        if let url = connectionOptions.urlContexts.first?.url { _ = MonoQuickAction.handle(url: url) }
+    }
+
+    // 앱이 떠 있을 때 아이콘 길게 누르기 메뉴를 고른 경우
+    func windowScene(_ windowScene: UIWindowScene, performActionFor shortcutItem: UIApplicationShortcutItem,
+                     completionHandler: @escaping (Bool) -> Void) {
+        MonoQuickAction.handle(shortcutItem); completionHandler(true)
     }
 
     func scene(_ scene: UIScene, openURLContexts URLContexts: Set<UIOpenURLContext>) {
+        if let url = URLContexts.first?.url, MonoQuickAction.handle(url: url) { return }
         SceneDelegateProxy.shared.scene(scene, openURLContexts: URLContexts)
     }
 

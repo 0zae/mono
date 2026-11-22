@@ -70,5 +70,25 @@
 	<string>영수증을 찍어 금액과 상호를 자동으로 입력하는 데 사용해요.</string>
 	<key>NSPhotoLibraryUsageDescription</key>
 	<string>보관함의 영수증 사진을 읽어 금액과 상호를 자동으로 입력하는 데 사용해요.</string>
+	<key>UIApplicationShortcutItems</key>
+	<array>
+		<dict>
+			<key>UIApplicationShortcutItemType</key><string>com.youngzae.mono.quick</string>
+			<key>UIApplicationShortcutItemTitle</key><string>빠른 기록</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key><string>plus</string>
+		</dict>
+		<dict>
+			<key>UIApplicationShortcutItemType</key><string>com.youngzae.mono.scan</string>
+			<key>UIApplicationShortcutItemTitle</key><string>영수증 스캔</string>
+			<key>UIApplicationShortcutItemIconSymbolName</key><string>doc.viewfinder</string>
+		</dict>
+	</array>
+	<key>CFBundleURLTypes</key>
+	<array>
+		<dict>
+			<key>CFBundleURLName</key><string>com.youngzae.mono</string>
+			<key>CFBundleURLSchemes</key><array><string>mono</string></array>
+		</dict>
+	</array>
 </dict>
 </plist>
