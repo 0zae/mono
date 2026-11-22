@@ -611,6 +611,7 @@ let txMode = "list"; // 내역은 목록이 기본, 달력은 아이콘을 눌�
 function openSheet(v){
   q.blur(); window.scrollTo(0,0); txOpen=false; selDay=null; txMode="list"; filter=null; sheetOpen=true; view=v||"list"; S.view=THIS_YM; renderSheet();
   $("scroll").scrollTop = 0;
+  animateMeter();
   const sh=$("sheet"); sh.classList.add("fresh"); clearTimeout(openSheet.t); openSheet.t=setTimeout(()=>sh.classList.remove("fresh"), 1400);
   requestAnimationFrame(()=>{ $("scrim").classList.add("on"); $("sheet").classList.add("on"); flyLogo(true); });
 }
@@ -626,7 +627,7 @@ function flyLogo(open){
   clearTimeout(flyTimer);
   if(open){
     const r=real.getBoundingClientRect(); if(!r.width) return;
-    const sheetTop=parseFloat(getComputedStyle($("sheet")).top)||57, h=20, s=h/r.height, w=r.width*s;
+    const sheetTop=parseFloat(getComputedStyle($("sheet")).top)||57, h=15, s=h/r.height, w=r.width*s;
     flyGeo={ a:{x:(innerWidth-w)/2, y:sheetTop-28.5-h/2, s}, b:{x:r.left, y:r.top, s:1} };
     fl.style.width=r.width+"px"; fl.style.transition="none"; fl.style.transform=flyAt(1);
     fl.classList.add("on"); real.style.visibility="hidden"; void fl.offsetWidth;
@@ -731,7 +732,72 @@ function slide(dir, render){
 $("gear").onclick=()=>slide(1, ()=>{ view="settings"; renderSheet(); });
 // 뒤로: 상세 → (들어온 곳: 분석 또는 내역), 분석·설정 → 내역
 let filterFrom = "list";
-const playBars = ()=>{ const sh=$("sheet"); sh.classList.remove("fresh"); void sh.offsetWidth; sh.classList.add("fresh"); clearTimeout(openSheet.t); openSheet.t=setTimeout(()=>sh.classList.remove("fresh"), 1400); };
+// 내역을 열 때: 예산 막대(주황)가 0에서 지금 비율까지 채워진다
+function animateMeter(){
+  const i = document.querySelector("#scroll .meter i");
+  if(!i || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  i.animate([{width:"0%"},{width:i.style.width}],{duration:850, delay:280, easing:"cubic-bezier(.32,.72,0,1)", fill:"backwards"});
+}
+// 월 이동: 내용이 이동 방향에서 살짝 밀려 들어오며 나타난다
+function monthSlide(dir){
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const sc=$("scroll"), h1=sc.querySelector(".title-row h1");
+  const els=[h1, ...[...sc.children].slice(1)].filter(Boolean);
+  els.forEach((el,k)=>el.animate([{opacity:0, transform:`translateX(${dir*18}px)`},{opacity:1, transform:"none"}],{duration:340, delay:Math.min(k,4)*25, easing:"cubic-bezier(.32,.72,0,1)", fill:"backwards"}));
+  animateMeter();
+}
+// 목록 ↔ 달력: 달력은 위에서 살짝 펼쳐지듯, 날짜 칸은 차례로 / 목록은 아래에서 떠오르듯
+function txSwitchAnim(){
+  if(matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const sc=$("scroll"), E="cubic-bezier(.32,.72,0,1)";
+  const cal=sc.querySelector(".cal");
+  if(cal){
+    // B: 오른쪽 위 달력 버튼 자리에서 동그랗게 피어나 카드로
+    const B="cubic-bezier(.3,1.3,.5,1)", br=getComputedStyle(cal).borderRadius;
+    cal.style.transformOrigin="100% 0";
+    cal.animate([{opacity:0, transform:"scale(.15)", borderRadius:"50%"},{opacity:1, transform:"none", borderRadius:br}],{duration:520, easing:B, fill:"backwards"}).onfinish=()=>{ cal.style.transformOrigin=""; };
+    // D: 오늘(없으면 고른 날)부터 동심원처럼 날짜가 퍼짐
+    const days=[...cal.querySelectorAll(".cal-grid > *")];
+    let from=days.findIndex(d=>d.classList.contains("today")); if(from<0) from=days.findIndex(d=>d.classList.contains("sel")); if(from<0) from=0;
+    const fr=Math.floor(from/7), fc=from%7;
+    days.forEach((d,k)=>{ if(!d.classList.contains("cal-d")) return; const dist=Math.hypot(Math.floor(k/7)-fr, k%7-fc);
+      d.animate([{opacity:0, transform:"scale(.5)"},{opacity:1, transform:"none"}],{duration:380, delay:180+dist*40, easing:B, fill:"backwards"}); });
+  }
+  const groups=[...sc.querySelectorAll(".sec-row ~ .cap, .sec-row ~ .group:not(.cal), .sec-row ~ .cal-empty, .sec-row ~ .empty")];
+  groups.forEach((g,k)=>g.animate([{opacity:0, transform:"translateY(8px)"},{opacity:1, transform:"none"}],{duration:320, delay:(cal?200:0)+Math.min(k,6)*30, easing:E, fill:"backwards"}));
+}
+function calCloseAnim(){
+  const cal=$("scroll").querySelector(".cal");
+  if(!cal || matchMedia("(prefers-reduced-motion: reduce)").matches) return Promise.resolve();
+  const E="cubic-bezier(.4,0,.7,.2)", days=[...cal.querySelectorAll(".cal-grid > *")];
+  let from=days.findIndex(d=>d.classList.contains("today")); if(from<0) from=days.findIndex(d=>d.classList.contains("sel")); if(from<0) from=0;
+  const fr=Math.floor(from/7), fc=from%7;
+  const dists=days.map((d,k)=>Math.hypot(Math.floor(k/7)-fr, k%7-fc)), far=Math.max(...dists);
+  days.forEach((d,k)=>{ if(d.classList.contains("cal-d"))
+    d.animate([{opacity:1, transform:"none"},{opacity:0, transform:"scale(.5)"}],{duration:220, delay:(far-dists[k])*22, easing:E, fill:"forwards"}); });
+  cal.style.transformOrigin="100% 0";
+  const br=getComputedStyle(cal).borderRadius;
+  const a=cal.animate([{opacity:1, transform:"none", borderRadius:br},{opacity:0, transform:"scale(.15)", borderRadius:"50%"}],{duration:300, delay:far*22*.6, easing:E, fill:"forwards"});
+  // 아래 목록·안내 글도 살짝 비켜 줌
+  [...$("scroll").querySelectorAll(".sec-row ~ :not(.cal)")].forEach(el=>el.animate([{opacity:1},{opacity:0}],{duration:200, fill:"forwards"}));
+  return a.finished.catch(()=>{});
+}
+// 분석 띠 등장 (C): 주황 한 덩어리로 쓱 늘어난 뒤 → 카테고리 색으로 물들며 조각 사이 틈이 생긴다
+function animateSegbar(){
+  const b = document.querySelector("#scroll .segbar");
+  if(!b || matchMedia("(prefers-reduced-motion: reduce)").matches) return;
+  const segs = [...b.children], cols = segs.map(e=>e.style.background), E = "cubic-bezier(.32,.72,0,1)";
+  b.style.gap = "0px";
+  segs.forEach((e,k)=>{ e.style.background = "var(--accent)"; e.style.borderRadius = k===0 ? "999px 0 0 999px" : k===segs.length-1 ? "0 999px 999px 0" : "0"; });
+  if(segs.length===1) segs[0].style.borderRadius = "999px";
+  b.style.clipPath = "inset(0 100% 0 0 round 999px)";
+  setTimeout(()=>{ // 화면이 옆으로 밀려 들어오는 동안은 기다렸다가, 회색 바탕 위로 주황이 채워진다
+    b.animate([{clipPath:"inset(0 100% 0 0 round 999px)"},{clipPath:"inset(0 0% 0 0 round 999px)"}],{duration:700, easing:E, fill:"forwards"}).onfinish = ()=>{
+      b.style.clipPath = ""; b.style.transition = `gap .45s ${E}`; b.style.gap = "2px";
+      segs.forEach((e,k)=>{ e.style.transition = `background .45s ease, border-radius .45s ${E}`; e.style.background = cols[k]; e.style.borderRadius = "999px"; });
+    };
+  }, 260);
+}
 $("back").onclick=()=>slide(-1, ()=>{
   const from = view, to = view==="filter" ? filterFrom : "list";
   view = to; filter = null; renderSheet();
@@ -791,7 +857,7 @@ function renderAnalysis(){
   if(!outs.length) h += `<div class="empty">${+m}월에는 지출이 없어요.</div>`;
   else{
     const cats=sumBy(outs, i=>i.c);
-    h += `<div class="segbar" role="img" aria-label="카테고리 비율">${cats.map(([c,v],k)=>`<i style="flex:${v};background:${color(c)};animation-delay:${k*.06}s"></i>`).join("")}</div>`;
+    h += `<div class="segtrack"><div class="segbar" role="img" aria-label="카테고리 비율">${cats.map(([c,v])=>`<i style="flex:${v};background:${color(c)}"></i>`).join("")}</div></div>`;
     h += `<div class="cap"><span>카테고리</span><span class="num">${inc?"수입 +"+won(inc)+"원":""}</span></div><div class="group">`+
       cats.map(([c,v])=>`<button class="cell" data-fc="${esc(c)}"><span class="cdot" style="background:${color(c)}"></span><span class="t"><span>${esc(c)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}% ${CHEV}</span></button>`).join("")+`</div>`;
     const pays=sumBy(outs, i=>methodName(i)||"미지정");
@@ -799,9 +865,9 @@ function renderAnalysis(){
       pays.map(([n,v])=>`<button class="cell" data-fp="${esc(n)}">${payTile(kindOf(methodByName(n)||{name:n}), methodByName(n)?.id===S.def)}<span class="t"><span>${esc(n)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}% ${CHEV}</span></button>`).join("")+`</div>`;
   }
   $("scroll").innerHTML = h;
-  $("aprev").onclick=()=>{ S.view=shiftYm(S.view,-1); renderSheet(); };
+  $("aprev").onclick=()=>{ S.view=shiftYm(S.view,-1); renderSheet(); monthSlide(-1); };
   $("anext").disabled = ym>=THIS_YM;
-  $("anext").onclick=()=>{ if(S.view<THIS_YM){ S.view=shiftYm(S.view,1); renderSheet(); } };
+  $("anext").onclick=()=>{ if(S.view<THIS_YM){ S.view=shiftYm(S.view,1); renderSheet(); monthSlide(1); } };
 }
 function renderFilter(){
   const [, m] = S.view.split("-");
@@ -838,16 +904,18 @@ function renderSheet(){
     <div class="row"><span>${left>=0?`남은 예산 <b class="num">${won(left)}원</b>`:`<b class="num" style="color:var(--red)">${won(-left)}원 초과</b>`}</span>
     <span>${isNow?"하루":"하루 평균"} <b class="num">${won(perDay)}원</b></span></div></div>`;
 
-  if(!list.length){ h += `<div class="empty">${+m}월에는 기록이 없어요.</div>`; }
-  else{
-    // 내역: 목록 / 달력 (분석은 위 요약을 누르면 따로)
-    h += `<div class="sec-row"><h2 class="sec">내역</h2><button class="txm${txMode==="cal"?" on":""}" data-txm="${txMode==="cal"?"list":"cal"}" aria-label="${txMode==="cal"?"목록으로 보기":"달력으로 보기"}" aria-pressed="${txMode==="cal"}">${CAL_ICON}</button></div>`;
-    if(txMode==="cal") h += calendar(ym, list);
-    else h += dayGroups(list);
-  }
+  // 내역 제목과 달력 버튼은 기록이 없는 달에도 늘 보인다 (분석은 위 요약을 누르면 따로)
+  h += `<div class="sec-row"><h2 class="sec">내역</h2><button class="txm${txMode==="cal"?" on":""}" data-txm="${txMode==="cal"?"list":"cal"}" aria-label="${txMode==="cal"?"목록으로 보기":"달력으로 보기"}" aria-pressed="${txMode==="cal"}">${CAL_ICON}</button></div>`;
+  if(txMode==="cal") h += calendar(ym, list);          // 기록이 없어도 빈 달력
+  else if(!list.length) h += `<div class="empty">${+m}월에는 기록이 없어요.</div>`;
+  else h += dayGroups(list);
   $("scroll").innerHTML = h;
   // 목록/달력 전환, 달력에서 날짜 고르기
-  $("scroll").querySelectorAll("[data-txm]").forEach(b=>b.onclick=()=>{ txMode=b.dataset.txm; const y=$("scroll").scrollTop; renderSheet(); $("scroll").scrollTop=y; });
+  $("scroll").querySelectorAll("[data-txm]").forEach(b=>b.onclick=async ()=>{
+    if(b.dataset.busy) return;
+    // 달력 → 목록: 등장의 반대로 (날짜가 바깥부터 오늘 쪽으로 사라지고, 카드가 버튼 자리로 쏙 들어감)
+    if(txMode==="cal"){ b.dataset.busy="1"; await calCloseAnim(); }
+    txMode=b.dataset.txm; const y=$("scroll").scrollTop; renderSheet(); $("scroll").scrollTop=y; txSwitchAnim(); });
   $("scroll").querySelectorAll("[data-day]").forEach(b=>b.onclick=()=>{ selDay=b.dataset.day; const y=$("scroll").scrollTop; renderSheet(); $("scroll").scrollTop=y; });
   const tt = $("txToggle");
   if(tt){
@@ -855,9 +923,9 @@ function renderSheet(){
     tt.querySelector("small").textContent = `최근: ${last.m} ${last.t==="in"?"+":"-"}${won(last.a)}원 · ${dayLabel(last.d)}`;
     tt.onclick = ()=>{ txOpen = !txOpen; const y = $("scroll").scrollTop; renderSheet(); $("scroll").scrollTop = y; };
   }
-  $("prev").onclick=()=>{ S.view=shiftYm(S.view,-1); selDay=null; renderSheet(); };
+  $("prev").onclick=()=>{ S.view=shiftYm(S.view,-1); selDay=null; renderSheet(); monthSlide(-1); };
   $("next").disabled = ym>=THIS_YM;
-  $("next").onclick=()=>{ if(S.view<THIS_YM){ S.view=shiftYm(S.view,1); selDay=null; renderSheet(); } };
+  $("next").onclick=()=>{ if(S.view<THIS_YM){ S.view=shiftYm(S.view,1); selDay=null; renderSheet(); monthSlide(1); } };
 }
 // 결제수단 아이콘: 종류 4가지(카드·현금·간편결제·계좌), 회색 타일 안의 선 아이콘. 색은 카테고리 전용이라 쓰지 않는다
 const PAY_KINDS = [["card","카드"],["cash","현금"],["pay","간편결제"],["bank","계좌"],["point","포인트·상품권"]];
@@ -1093,7 +1161,7 @@ $("scroll").addEventListener("click", e=>{
   const del=e.target.closest(".sw-del"); if(del) return swDelete(del.closest(".sw"));
   const t=e.target.closest("[data-id]"); if(t) return openTx(t.dataset.id);
   const fc=e.target.closest("[data-fc]"), fp=e.target.closest("[data-fp]");
-  if(e.target.closest("[data-ana]")){ listScroll = $("scroll").scrollTop; return slide(1, ()=>{ view="analysis"; renderSheet(); playBars(); }); }
+  if(e.target.closest("[data-ana]")){ listScroll = $("scroll").scrollTop; return slide(1, ()=>{ view="analysis"; renderSheet(); animateSegbar(); }); }
   if(fc||fp){ if(view==="list") listScroll = $("scroll").scrollTop; filterFrom = view; filter = fc ? {kind:"c", value:fc.dataset.fc} : {kind:"p", value:fp.dataset.fp}; return slide(1, ()=>{ view="filter"; renderSheet(); }); }
   const m=e.target.closest("[data-m]"); if(m) return openMethod(m.dataset.m);
   const c=e.target.closest("[data-cat]"); if(c) return openCat(c.dataset.cat);

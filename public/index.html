@@ -112,7 +112,7 @@ html:not(.splash-done):not(.splash-fading) .logo img{opacity:0}
 html:has(.splash[data-style="none"]):not(.splash-done) :is(.field,.below,.foot){opacity:0}
 /* 로고: 검색창 바로 위 가운데 (구글식) */
 .logo{display:flex;justify-content:center;margin:0 0 38px}
-.logo img{display:block;height:41px;width:auto}
+.logo img{display:block;height:28px;width:auto} /* 주황 글자만 (박스 없음) */
 .foot{position:fixed;left:0;right:0;bottom:var(--kb,0px);padding-bottom:calc(20px + var(--sab,env(safe-area-inset-bottom,0px)));display:flex;justify-content:center;background:var(--home);transition:bottom .25s ease}
 .kb-open .foot{padding-bottom:6px}
 .foot button{border:0;background:none;color:var(--label2);font-size:15px;padding:10px 14px;border-radius:10px;display:flex;align-items:center;gap:6px}
@@ -183,11 +183,11 @@ button.cell:active{background:var(--fill)}
 .sheet-toast.on{transform:translate(-50%,0);opacity:1;pointer-events:auto}
 .sheet-toast button{border:0;background:none;color:#FF8A66;font-size:14px;font-weight:600;padding:0}
 /* 분석: 카테고리 비율 띠 */
-.segbar{display:flex;gap:2px;height:12px;margin:2px 0 16px}
-/* A · 알약 조각: 색마다 양끝 둥글게, 틈 2px. 열 때 왼쪽부터 차례로 쭉 늘어남 */
-.segbar i{display:block;min-width:12px;height:12px;border-radius:6px;transform-origin:left center}
-.sheet.fresh .segbar i{animation:segGrow .9s cubic-bezier(.3,1.25,.5,1) both} /* 내역을 열 때만 (고칠 때마다 다시 움직이지 않게) */
-@keyframes segGrow{from{transform:scaleX(0);opacity:.4}}
+/* 분석 비율 띠: 내역 예산 막대와 같은 두께·같은 회색 바탕 위에 */
+.segtrack{height:6px;border-radius:3px;background:var(--fill);margin:6px 0 18px;overflow:hidden}
+.segbar{display:flex;gap:2px;height:100%}
+.segbar i{display:block;min-width:6px;height:100%;border-radius:999px}
+
 .ptile{width:30px;height:30px;border-radius:9px;background:var(--fill);color:var(--label2);display:grid;place-items:center;flex:none}
 .ptile.def{background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent)}
 .pi{width:20px;height:20px;fill:none;stroke:currentColor;stroke-width:1.6;stroke-linecap:round;stroke-linejoin:round}
@@ -210,11 +210,12 @@ button.cell:active{background:var(--fill)}
 .cal-wk span:first-child{color:var(--red)}
 .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);row-gap:4px}
 .cal-d{border:0;background:none;height:48px;display:flex;flex-direction:column;align-items:center;gap:2px;border-radius:12px;padding:4px 0 0;color:var(--label)}
-.cal-d .n{font-size:14px;width:26px;height:26px;line-height:26px;border-radius:50%;text-align:center}
+.cal-d .n{font-size:14px;width:28px;height:28px;line-height:28px;border-radius:50%;text-align:center;transition:background .2s,color .2s}
 .cal-d .m{font-size:9.5px;line-height:12px;color:var(--label2);font-variant-numeric:tabular-nums;letter-spacing:-.02em}
 .cal-d .m.in{color:var(--green)}
-.cal-d.today .n{background:var(--accent);color:#fff;font-weight:600}
-.cal-d.sel{background:color-mix(in srgb,var(--accent) 10%,transparent)}
+/* 표시는 원만: 오늘 = 주황 원, 고른 날 = 연주황 원 (오늘을 고르면 오늘 원 그대로) */
+.cal-d.today .n{background:var(--accent);color:#fff;font-weight:700}
+.cal-d.sel:not(.today) .n{background:color-mix(in srgb,var(--accent) 15%,transparent);color:var(--accent);font-weight:700}
 .cal-d.future .n{color:var(--label3)}
 .cal-empty{font-size:14px;color:var(--label2);text-align:center;padding:14px 0 24px}
 h2.sec{font-size:22px;line-height:28px;font-weight:700;letter-spacing:.01em;margin:6px 0 12px}

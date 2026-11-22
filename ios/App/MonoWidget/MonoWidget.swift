@@ -1,47 +1,124 @@
 import WidgetKit
 import SwiftUI
+import AppIntents
 
-// Mono 위젯: 데이터 없이 누르면 바로 기록(또는 스캔)으로 가는 버튼 위젯
-//  A · 주황 한 칸 (작은 크기)   C · 첫 화면 축소판 (중간 크기)   D · 잠금 화면 (동그라미·직사각형·한 줄)
-//  누르면 mono://quick (입력칸) / mono://scan (영수증 스캔) 으로 앱을 연다
+// Mono 위젯: 누르면 바로 기록(또는 스캔)으로 가는 버튼 위젯
+//  A · 주황 한 칸 (작은 크기)   C · 첫 화면 축소판 (중간 크기)   D · 잠금 화면
+//  - 위젯 편집에서 테마(default / liquid)를 고른다 (무료 계정이라 앱 설정을 직접 읽을 수 없어서)
+//  - iOS 홈 화면이 '투명·색조'일 때는 iOS가 유리처럼 그려 주므로, 글자만 남는 로고로 맞춘다
+//  누르면 mono://quick (입력칸) / mono://scan (영수증 스캔)
 
 private let monoOrange = Color(red: 1, green: 90/255, blue: 46/255)
 private let quickURL = URL(string: "mono://quick")!
 private let scanURL = URL(string: "mono://scan")!
 
-struct MonoEntry: TimelineEntry { let date: Date }
+// ---------- 위젯 편집: 테마 ----------
+enum MonoTheme: String, AppEnum {
+    case standard, liquid
+    static var typeDisplayRepresentation: TypeDisplayRepresentation = "테마"
+    static var caseDisplayRepresentations: [MonoTheme: DisplayRepresentation] = [.standard: "default", .liquid: "liquid"]
+}
 
-struct MonoProvider: TimelineProvider {
-    func placeholder(in context: Context) -> MonoEntry { MonoEntry(date: .now) }
-    func getSnapshot(in context: Context, completion: @escaping (MonoEntry) -> Void) { completion(MonoEntry(date: .now)) }
-    func getTimeline(in context: Context, completion: @escaping (Timeline<MonoEntry>) -> Void) {
-        completion(Timeline(entries: [MonoEntry(date: .now)], policy: .never)) // 내용이 바뀌지 않는 버튼이라 새로 그릴 필요 없음
+struct ThemeIntent: WidgetConfigurationIntent {
+    static var title: LocalizedStringResource = "테마"
+    static var description = IntentDescription("Mono 앱에서 고른 테마와 같게 맞춰 주세요.")
+    @Parameter(title: "테마", default: .standard) var theme: MonoTheme
+}
+
+struct MonoEntry: TimelineEntry { let date: Date; let theme: MonoTheme }
+
+struct ThemedProvider: AppIntentTimelineProvider {
+    func placeholder(in context: Context) -> MonoEntry { MonoEntry(date: .now, theme: .standard) }
+    func snapshot(for configuration: ThemeIntent, in context: Context) async -> MonoEntry { MonoEntry(date: .now, theme: configuration.theme) }
+    func timeline(for configuration: ThemeIntent, in context: Context) async -> Timeline<MonoEntry> {
+        Timeline(entries: [MonoEntry(date: .now, theme: configuration.theme)], policy: .never) // 버튼이라 다시 그릴 필요 없음
     }
 }
 
-// A · 주황 한 칸
-struct QuickTileView: View {
+struct StaticProvider: TimelineProvider {
+    func placeholder(in context: Context) -> MonoEntry { MonoEntry(date: .now, theme: .standard) }
+    func getSnapshot(in context: Context, completion: @escaping (MonoEntry) -> Void) { completion(placeholder(in: context)) }
+    func getTimeline(in context: Context, completion: @escaping (Timeline<MonoEntry>) -> Void) {
+        completion(Timeline(entries: [placeholder(in: context)], policy: .never))
+    }
+}
+
+// ---------- liquid 바탕: 앱 배경처럼 옅은 웜톤 위에 뿌연 원 ----------
+struct LiquidWall: View {
+    @Environment(\.colorScheme) var scheme
     var body: some View {
+        let dark = scheme == .dark
+        ZStack {
+            LinearGradient(colors: dark ? [Color(red: 0.08, green: 0.06, blue: 0.06), Color(red: 0.11, green: 0.08, blue: 0.07)]
+                                        : [Color(red: 0.98, green: 0.96, blue: 0.94), Color(red: 0.97, green: 0.93, blue: 0.91)],
+                           startPoint: .topLeading, endPoint: .bottomTrailing)
+            Circle().fill((dark ? Color(red: 0.35, green: 0.17, blue: 0.11) : Color(red: 0.95, green: 0.78, blue: 0.70)).opacity(0.75))
+                .frame(width: 170).blur(radius: 40).offset(x: -90, y: -50)
+            Circle().fill((dark ? Color(red: 0.24, green: 0.15, blue: 0.2) : Color(red: 0.91, green: 0.83, blue: 0.88)).opacity(0.7))
+                .frame(width: 150).blur(radius: 40).offset(x: 110, y: 55)
+        }
+    }
+}
+
+// 유리 테두리 빛 (위·왼쪽이 밝게)
+struct GlassRim: ViewModifier {
+    var radius: CGFloat
+    func body(content: Content) -> some View {
+        content.overlay(
+            RoundedRectangle(cornerRadius: radius, style: .continuous)
+                .strokeBorder(LinearGradient(colors: [.white.opacity(0.95), .white.opacity(0.25), .white.opacity(0.55)],
+                                             startPoint: .topLeading, endPoint: .bottomTrailing), lineWidth: 1)
+        )
+    }
+}
+
+// ---------- A · 주황 한 칸 ----------
+struct QuickTileView: View {
+    let theme: MonoTheme
+    @Environment(\.widgetRenderingMode) var mode
+    var body: some View {
+        let full = mode == .fullColor
         VStack(alignment: .leading) {
-            Image("Logo").resizable().scaledToFit().frame(height: 22) // 주황 바탕이라 흰 글자만 보인다
+            Image("LogoGlyph").resizable().scaledToFit().frame(height: 24)
+                .foregroundStyle(full ? .white : .primary).widgetAccentable()
+                .padding(.leading, -8) // 글자 바깥 여백 보정
             Spacer()
             HStack(spacing: 6) {
                 Image(systemName: "plus").font(.system(size: 18, weight: .bold))
                 Text("기록하기").font(.system(size: 19, weight: .bold))
             }
-            .foregroundStyle(.white)
+            .foregroundStyle(full ? .white : .primary)
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
-        .containerBackground(monoOrange, for: .widget)
+        .containerBackground(for: .widget) {
+            if theme == .liquid {
+                // 주황 유리: 위에서 빛이 비치는 그라데이션 + 위쪽 하이라이트
+                ZStack {
+                    LinearGradient(colors: [Color(red: 1, green: 0.48, blue: 0.3), monoOrange, Color(red: 0.92, green: 0.3, blue: 0.16)],
+                                   startPoint: .topLeading, endPoint: .bottomTrailing)
+                    LinearGradient(colors: [.white.opacity(0.35), .clear], startPoint: .top, endPoint: .center)
+                }
+            } else {
+                monoOrange
+            }
+        }
         .widgetURL(quickURL)
     }
 }
 
-// C · 첫 화면 축소판: 로고 + 입력창(기록하기) + 오른쪽 스캔
+// ---------- C · 첫 화면 축소판 ----------
 struct HomeBarView: View {
+    let theme: MonoTheme
+    @Environment(\.widgetRenderingMode) var mode
     var body: some View {
+        let full = mode == .fullColor
+        let liquid = theme == .liquid && full
         VStack(spacing: 14) {
-            Image("Logo").resizable().scaledToFit().frame(height: 26)
+            Group {
+                if full { Image("Logo").resizable().scaledToFit() }
+                else { Image("LogoGlyph").resizable().scaledToFit().widgetAccentable() }
+            }
+            .frame(height: 26)
             HStack(spacing: 8) {
                 Link(destination: quickURL) {
                     HStack(spacing: 8) {
@@ -54,21 +131,31 @@ struct HomeBarView: View {
                 }
                 Link(destination: scanURL) {
                     Image(systemName: "doc.viewfinder")
-                        .font(.system(size: 18, weight: .regular))
-                        .foregroundStyle(monoOrange)
+                        .font(.system(size: 18))
+                        .foregroundStyle(full ? AnyShapeStyle(monoOrange) : AnyShapeStyle(.primary))
+                        .widgetAccentable()
                         .frame(width: 36, height: 36)
                 }
             }
             .padding(.leading, 14).padding(.trailing, 4)
             .frame(height: 44)
-            .background(Capsule().fill(Color(.tertiarySystemFill)))
+            .background {
+                if liquid {
+                    Capsule().fill(.white.opacity(0.62)).modifier(GlassRim(radius: 22))
+                        .shadow(color: Color(red: 0.31, green: 0.12, blue: 0.04).opacity(0.10), radius: 8, y: 3)
+                } else {
+                    Capsule().fill(Color(.tertiarySystemFill))
+                }
+            }
         }
-        .containerBackground(for: .widget) { Color(.systemBackground) }
+        .containerBackground(for: .widget) {
+            if theme == .liquid { LiquidWall() } else { Color(.systemBackground) }
+        }
         .widgetURL(quickURL)
     }
 }
 
-// D · 잠금 화면
+// ---------- D · 잠금 화면 (iOS가 잠금 화면 모양으로 그림) ----------
 struct LockView: View {
     @Environment(\.widgetFamily) var family
     var body: some View {
@@ -96,25 +183,25 @@ struct LockView: View {
 
 struct QuickTileWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "MonoQuickTile", provider: MonoProvider()) { _ in QuickTileView() }
+        AppIntentConfiguration(kind: "MonoQuickTile", intent: ThemeIntent.self, provider: ThemedProvider()) { e in QuickTileView(theme: e.theme) }
             .configurationDisplayName("기록하기")
-            .description("누르면 바로 기록해요.")
+            .description("누르면 바로 기록해요. 길게 눌러 테마를 고를 수 있어요.")
             .supportedFamilies([.systemSmall])
     }
 }
 
 struct HomeBarWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "MonoHomeBar", provider: MonoProvider()) { _ in HomeBarView() }
+        AppIntentConfiguration(kind: "MonoHomeBar", intent: ThemeIntent.self, provider: ThemedProvider()) { e in HomeBarView(theme: e.theme) }
             .configurationDisplayName("기록하기")
-            .description("입력창을 누르면 기록, 오른쪽은 영수증 스캔.")
+            .description("입력창을 누르면 기록, 오른쪽은 영수증 스캔. 길게 눌러 테마를 고를 수 있어요.")
             .supportedFamilies([.systemMedium])
     }
 }
 
 struct LockWidget: Widget {
     var body: some WidgetConfiguration {
-        StaticConfiguration(kind: "MonoLock", provider: MonoProvider()) { _ in LockView() }
+        StaticConfiguration(kind: "MonoLock", provider: StaticProvider()) { _ in LockView() }
             .configurationDisplayName("기록하기")
             .description("잠금 화면에서 바로 기록해요.")
             .supportedFamilies([.accessoryCircular, .accessoryRectangular, .accessoryInline])
