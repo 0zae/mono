@@ -611,6 +611,7 @@ let txMode = "list"; // 내역은 목록이 기본, 달력은 아이콘을 눌�
 function openSheet(v){
   q.blur(); window.scrollTo(0,0); txOpen=false; selDay=null; txMode="list"; filter=null; sheetOpen=true; view=v||"list"; S.view=THIS_YM; renderSheet();
   $("scroll").scrollTop = 0;
+  const sh=$("sheet"); sh.classList.add("fresh"); clearTimeout(openSheet.t); openSheet.t=setTimeout(()=>sh.classList.remove("fresh"), 1400);
   requestAnimationFrame(()=>{ $("scrim").classList.add("on"); $("sheet").classList.add("on"); flyLogo(true); });
 }
 function closeSheet(){ sheetOpen=false; editingBudget=false; $("scrim").classList.remove("on"); $("sheet").classList.remove("on"); flyLogo(false); closeAS(); q.focus(); }
@@ -728,7 +729,14 @@ function slide(dir, render){
   setTimeout(done, 440);
 }
 $("gear").onclick=()=>slide(1, ()=>{ view="settings"; renderSheet(); });
-$("back").onclick=()=>slide(-1, ()=>{ const fromFilter = view==="filter"; view="list"; filter=null; renderSheet(); if(fromFilter) $("scroll").scrollTop = listScroll; });
+// 뒤로: 상세 → (들어온 곳: 분석 또는 내역), 분석·설정 → 내역
+let filterFrom = "list";
+const playBars = ()=>{ const sh=$("sheet"); sh.classList.remove("fresh"); void sh.offsetWidth; sh.classList.add("fresh"); clearTimeout(openSheet.t); openSheet.t=setTimeout(()=>sh.classList.remove("fresh"), 1400); };
+$("back").onclick=()=>slide(-1, ()=>{
+  const from = view, to = view==="filter" ? filterFrom : "list";
+  view = to; filter = null; renderSheet();
+  if(to==="list" && (from==="filter" || from==="analysis")) $("scroll").scrollTop = listScroll;
+});
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(asOpen()) closeAS(); else if(sheetOpen) closeSheet(); } });
 
 function sumBy(list, key){
@@ -773,6 +781,28 @@ function calendar(ym, list){
 }
 // 분석에서 카테고리·결제수단을 누르면 그 내역만 모아 보기
 let filter = null, listScroll = 0;
+// 분석: 카테고리 비율 띠 + 카테고리별 + 결제수단별 (내역 요약을 눌러 들어옴)
+function renderAnalysis(){
+  const ym=S.view, list=items(ym), [y,m]=ym.split("-");
+  const outs=list.filter(i=>i.t==="out"), out=outs.reduce((s,i)=>s+i.a,0);
+  const inc=list.filter(i=>i.t==="in").reduce((s,i)=>s+i.a,0);
+  let h = `<div class="title-row"><h1>${+m}월 분석${y!=String(today.getFullYear())?` <span style="color:var(--label2);font-weight:600;font-size:22px">${y}</span>`:""}</h1><div class="mnav"><button id="aprev" aria-label="이전 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M7.5 2 1.5 8l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button id="anext" aria-label="다음 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M2.5 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>`;
+  h += `<div class="sum"><span class="v num">${won(out)}원</span></div>`;
+  if(!outs.length) h += `<div class="empty">${+m}월에는 지출이 없어요.</div>`;
+  else{
+    const cats=sumBy(outs, i=>i.c);
+    h += `<div class="segbar" role="img" aria-label="카테고리 비율">${cats.map(([c,v],k)=>`<i style="flex:${v};background:${color(c)};animation-delay:${k*.06}s"></i>`).join("")}</div>`;
+    h += `<div class="cap"><span>카테고리</span><span class="num">${inc?"수입 +"+won(inc)+"원":""}</span></div><div class="group">`+
+      cats.map(([c,v])=>`<button class="cell" data-fc="${esc(c)}"><span class="cdot" style="background:${color(c)}"></span><span class="t"><span>${esc(c)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}% ${CHEV}</span></button>`).join("")+`</div>`;
+    const pays=sumBy(outs, i=>methodName(i)||"미지정");
+    h += `<div class="cap"><span>결제수단</span></div><div class="group">`+
+      pays.map(([n,v])=>`<button class="cell" data-fp="${esc(n)}">${payTile(kindOf(methodByName(n)||{name:n}), methodByName(n)?.id===S.def)}<span class="t"><span>${esc(n)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}% ${CHEV}</span></button>`).join("")+`</div>`;
+  }
+  $("scroll").innerHTML = h;
+  $("aprev").onclick=()=>{ S.view=shiftYm(S.view,-1); renderSheet(); };
+  $("anext").disabled = ym>=THIS_YM;
+  $("anext").onclick=()=>{ if(S.view<THIS_YM){ S.view=shiftYm(S.view,1); renderSheet(); } };
+}
 function renderFilter(){
   const [, m] = S.view.split("-");
   const match = filter.kind==="c" ? (i=>i.c===filter.value) : (i=>(methodName(i)||"미지정")===filter.value);
@@ -787,7 +817,9 @@ function renderFilter(){
 }
 function renderSheet(){
   $("gear").hidden = view!=="list"; $("back").hidden = view==="list";
+  $("back").lastChild.textContent = view==="filter" && filterFrom==="analysis" ? "분석" : "내역";
   if(view==="settings") return renderSettings();
+  if(view==="analysis") return renderAnalysis();
   if(view==="filter") return renderFilter();
   const ym=S.view, list=items(ym), [y,m]=ym.split("-");
   const outs = list.filter(i=>i.t==="out");
@@ -800,29 +832,18 @@ function renderSheet(){
   let h = `<div class="title-row"><h1>${+m}월${y!=String(today.getFullYear())?` <span style="color:var(--label2);font-weight:600;font-size:22px">${y}</span>`:""}</h1><div class="mnav" id="mnav"><button id="prev" aria-label="이전 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M7.5 2 1.5 8l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button id="next" aria-label="다음 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M2.5 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>`;
   // 크게: 이 달에 쓴 돈 / 작게: 남은 예산·하루 쓸 수 있는 돈
   // 크게: 쓴 돈 / 예산, 아래 한 줄: 남은 예산 · 하루
-  h += `<div class="sum"><span class="v num">${won(out)}원<small class="of"> / ${won(S.budget)}원</small></span>
+  // 요약을 누르면 분석 화면으로 (기록이 있을 때)
+  h += `<div class="sum${list.length?" tap":""}" ${list.length?`data-ana role="button" tabindex="0" aria-label="분석 보기"`:""}><span class="v num">${won(out)}원<small class="of"> / ${won(S.budget)}원</small>${list.length?`<span class="ana">분석 ${CHEV}</span>`:""}</span>
     <div class="meter"><i class="${out>S.budget?"over":""}" style="width:${pct}%"></i></div>
     <div class="row"><span>${left>=0?`남은 예산 <b class="num">${won(left)}원</b>`:`<b class="num" style="color:var(--red)">${won(-left)}원 초과</b>`}</span>
     <span>${isNow?"하루":"하루 평균"} <b class="num">${won(perDay)}원</b></span></div></div>`;
 
   if(!list.length){ h += `<div class="empty">${+m}월에는 기록이 없어요.</div>`; }
   else{
-    const cats=sumBy(outs, i=>i.c);
-    h += `<h2 class="sec">분석</h2><div class="cap"><span>카테고리</span><span class="num">${inc?"수입 +"+won(inc)+"원":""}</span></div><div class="group">`+
-      (cats.length?cats.map(([c,v])=>`<button class="cell" data-fc="${esc(c)}"><span class="cdot" style="background:${color(c)}"></span><span class="t"><span>${esc(c)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}% ${CHEV}</span></button>`).join("")
-        :`<div class="cell"><span class="t"><small>지출이 없어요</small></span></div>`)+`</div>`;
-    const pays=sumBy(outs, i=>methodName(i)||"미지정");
-    if(pays.length){
-      h += `<div class="cap"><span>결제수단</span></div><div class="group">`+
-        pays.map(([n,v])=>`<button class="cell" data-fp="${esc(n)}">${payTile(kindOf(methodByName(n)||{name:n}), methodByName(n)?.id===S.def)}<span class="t"><span>${esc(n)}</span></span><span class="r num">${won(v)}원 · ${Math.round(v/out*100)}% ${CHEV}</span></button>`).join("")+`</div>`;
-    }
-    // 내역: 목록 / 달력
+    // 내역: 목록 / 달력 (분석은 위 요약을 누르면 따로)
     h += `<div class="sec-row"><h2 class="sec">내역</h2><button class="txm${txMode==="cal"?" on":""}" data-txm="${txMode==="cal"?"list":"cal"}" aria-label="${txMode==="cal"?"목록으로 보기":"달력으로 보기"}" aria-pressed="${txMode==="cal"}">${CAL_ICON}</button></div>`;
     if(txMode==="cal") h += calendar(ym, list);
-    else {
-      h += `<div class="group"><button class="cell toggle" id="txToggle" aria-expanded="${txOpen}"><span class="t"><span>내역 ${list.length}건</span><small></small></span><span class="r chev${txOpen?" open":""}">${CHEV}</span></button></div>`;
-      if(txOpen) h += dayGroups(list);
-    }
+    else h += dayGroups(list);
   }
   $("scroll").innerHTML = h;
   // 목록/달력 전환, 달력에서 날짜 고르기
@@ -1072,7 +1093,8 @@ $("scroll").addEventListener("click", e=>{
   const del=e.target.closest(".sw-del"); if(del) return swDelete(del.closest(".sw"));
   const t=e.target.closest("[data-id]"); if(t) return openTx(t.dataset.id);
   const fc=e.target.closest("[data-fc]"), fp=e.target.closest("[data-fp]");
-  if(fc||fp){ listScroll = $("scroll").scrollTop; filter = fc ? {kind:"c", value:fc.dataset.fc} : {kind:"p", value:fp.dataset.fp}; return slide(1, ()=>{ view="filter"; renderSheet(); }); }
+  if(e.target.closest("[data-ana]")){ listScroll = $("scroll").scrollTop; return slide(1, ()=>{ view="analysis"; renderSheet(); playBars(); }); }
+  if(fc||fp){ if(view==="list") listScroll = $("scroll").scrollTop; filterFrom = view; filter = fc ? {kind:"c", value:fc.dataset.fc} : {kind:"p", value:fp.dataset.fp}; return slide(1, ()=>{ view="filter"; renderSheet(); }); }
   const m=e.target.closest("[data-m]"); if(m) return openMethod(m.dataset.m);
   const c=e.target.closest("[data-cat]"); if(c) return openCat(c.dataset.cat);
   const r=e.target.closest("[data-rec]"); if(r) return openRec(r.dataset.rec);
@@ -1080,17 +1102,30 @@ $("scroll").addEventListener("click", e=>{
 });
 function openTx(id){
   const [ym,i]=find(id); if(!ym) return; const it=S.months[ym][i];
-  const as = showAS(`<div class="g"><div class="h"></div>
+  const as = showAS(`<div class="g"><div class="t-meta"></div>
+    <label class="t-amt ${it.t}"><span class="sign">${it.t==="in"?"+":""}</span><input id="tAmt" class="num" inputmode="numeric" enterkeyhint="done" autocomplete="off" aria-label="금액"><span class="won">원</span></label>
     <div class="fields"><input id="tName" maxlength="40" enterkeyhint="done" autocomplete="off" aria-label="내역 이름"></div>
     <div class="sub">카테고리</div><div class="chips">${allCats().map(c=>`<button data-c="${esc(c)}" class="${c===it.c?"sel":""}"><i style="background:${c===it.c?"#fff":color(c)}"></i>${esc(c)}</button>`).join("")}</div>
     <div class="sub">결제수단</div><div class="chips">${S.methods.map(m=>`<button data-p="${m.id}" class="${m.id===it.p?"sel":""}"></button>`).join("")}</div>
     <button class="btn red" id="asDel">삭제</button></div><div class="g"><button class="btn b" id="asCancel">닫기</button></div>`);
-  as.querySelector(".h").textContent = `${it.t==="in"?"+":""}${won(it.a)}원 · ${dayLabel(it.d)}`;
-  // 이름: 바로 고칠 수 있게. 창을 닫거나 다른 걸 고를 때 함께 저장
-  const name=$("tName"); name.value=it.m;
-  const saveName=()=>{ const v=name.value.trim(); if(v && v!==it.m) update(id,{m:v}); };
+  as.querySelector(".t-meta").textContent = dayLabel(it.d);
+  // 금액(크게)·이름: 바로 고칠 수 있게. 창을 닫거나 다른 걸 고를 때 함께 저장
+  const name=$("tName"), amt=$("tAmt"); name.value=it.m;
+  // 입력칸 폭을 글자 폭에 딱 맞춰서 "원"이 숫자 바로 뒤에 붙게
+  const ctx=document.createElement("canvas").getContext("2d");
+  const fit=()=>{ const cs=getComputedStyle(amt), v=amt.value||"0"; ctx.font=cs.font;
+    amt.style.width = Math.ceil(ctx.measureText(v).width + v.length*(parseFloat(cs.letterSpacing)||0))+1+"px"; }; // 자간(-0.02em)까지 빼서 계산
+  amt.value=won(it.a); fit();
+  amt.addEventListener("input", ()=>{ const n=amt.value.replace(/[^\d]/g,"").slice(0,10); amt.value = n ? won(+n) : ""; fit(); });
+  amt.addEventListener("focus", ()=>setTimeout(()=>amt.setSelectionRange(amt.value.length, amt.value.length), 0));
+  const saveName=()=>{
+    const patch={}, v=name.value.trim(), a=+amt.value.replace(/[^\d]/g,"");
+    if(v && v!==it.m) patch.m=v;
+    if(a>0 && a!==it.a) patch.a=a;
+    if(Object.keys(patch).length) update(id, patch);
+  };
   asBeforeClose = saveName;
-  name.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); closeAS(); } });
+  for(const el of [name, amt]) el.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); closeAS(); } });
   as.querySelectorAll("[data-c]").forEach(b=>b.onclick=()=>{ saveName(); update(id,{c:b.dataset.c,t:b.dataset.c===INCOME?"in":"out"},true); closeAS(); });
   as.querySelectorAll("[data-p]").forEach(b=>{ const m=methodById(b.dataset.p); b.textContent=m.name; b.onclick=()=>{ saveName(); update(id,{p:m.id,pn:m.name}); closeAS(); }; });
   $("asDel").onclick=()=>{ asBeforeClose=null; remove(id); closeAS(); };
