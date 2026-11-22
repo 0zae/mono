@@ -27,7 +27,8 @@ const WD = ["일","월","화","수","목","금","토"];
 function dayLabel(d){
   if(d===TODAY) return "오늘";
   const y=new Date(today); y.setDate(y.getDate()-1); if(d===ymd(y)) return "어제";
-  const t=new Date(d+"T00:00:00"); return (t.getMonth()+1)+"월 "+t.getDate()+"일 "+WD[t.getDay()]+"요일";
+  const t=new Date(d+"T00:00:00"), yy=t.getFullYear()!==today.getFullYear() ? t.getFullYear()+"년 " : ""; // 다른 해면 연도도 (검색 결과용)
+  return yy+(t.getMonth()+1)+"월 "+t.getDate()+"일 "+WD[t.getDay()]+"요일";
 }
 
 /* ---------- natural language ---------- */
@@ -688,14 +689,14 @@ function slide(dir, render){
   sheet.appendChild(ghost);
   ghost.scrollTop = scrollY;
   // 상단바 왼쪽 글자(설정 / ‹ 내역): 나가는 글자를 본떠 두고 밀면서 사라지게
-  const leftOld = [$("gear"), $("back")].find(b=>!b.hidden);
+  const leftOld = [$("barLeft"), $("back")].find(b=>!b.hidden);
   const rOld = leftOld.getBoundingClientRect(), rBar = bar.getBoundingClientRect();
   const oldLabel = leftOld.cloneNode(true);
   oldLabel.removeAttribute("id"); oldLabel.hidden = false;
   oldLabel.style.cssText = `position:absolute;left:${rOld.left-rBar.left}px;top:${rOld.top-rBar.top}px;margin:0;pointer-events:none`;
   bar.appendChild(oldLabel);
   render();
-  const leftNew = [$("gear"), $("back")].find(b=>!b.hidden);
+  const leftNew = [$("barLeft"), $("back")].find(b=>!b.hidden);
   // 위로 덮는 화면에 불투명 바탕과 왼쪽 그림자 (앞으로: 새 화면이 위, 뒤로: 나가는 화면이 위)
   const top = dir>0 ? sc : ghost, under = dir>0 ? ghost : sc;
   sc.style.position = "relative";
@@ -730,6 +731,7 @@ function slide(dir, render){
   setTimeout(done, 440);
 }
 $("gear").onclick=()=>slide(1, ()=>{ view="settings"; renderSheet(); });
+$("search").onclick=()=>{ listScroll=$("scroll").scrollTop; slide(1, ()=>{ view="search"; renderSheet(); }); setTimeout(()=>$("sq")?.focus(), 450); };
 // 뒤로: 상세 → (들어온 곳: 분석 또는 내역), 분석·설정 → 내역
 let filterFrom = "list";
 // 내역을 열 때: 예산 막대(주황)가 0에서 지금 비율까지 채워진다
@@ -801,7 +803,7 @@ function animateSegbar(){
 $("back").onclick=()=>slide(-1, ()=>{
   const from = view, to = view==="filter" ? filterFrom : "list";
   view = to; filter = null; renderSheet();
-  if(to==="list" && (from==="filter" || from==="analysis")) $("scroll").scrollTop = listScroll;
+  if(to==="list" && (from==="filter" || from==="analysis" || from==="search")) $("scroll").scrollTop = listScroll;
 });
 document.addEventListener("keydown",e=>{ if(e.key==="Escape"){ if(asOpen()) closeAS(); else if(sheetOpen) closeSheet(); } });
 
@@ -847,6 +849,35 @@ function calendar(ym, list){
 }
 // 분석에서 카테고리·결제수단을 누르면 그 내역만 모아 보기
 let filter = null, listScroll = 0;
+// 검색: 모든 달의 내역에서 이름·카테고리·결제수단·금액으로 찾고, 최근 순으로 보여 준다
+let searchQ = "";
+function renderSearch(){
+  $("scroll").innerHTML = `<h1>검색</h1>
+    <label class="search-in"><svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true"><circle cx="7.2" cy="7.2" r="5.7" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M11.4 11.4 15.6 15.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg><input id="sq" type="search" enterkeyhint="search" autocomplete="off" placeholder="가게, 카테고리, 결제수단, 금액" aria-label="내역 검색"><button class="clr" id="sqClr" type="button" aria-label="지우기" hidden>✕</button></label>
+    <div id="sres"></div>`;
+  const inp=$("sq"), clr=$("sqClr");
+  inp.value = searchQ;
+  const run = ()=>{ searchQ = inp.value; clr.hidden = !searchQ; $("sres").innerHTML = searchResults(searchQ); };
+  inp.addEventListener("input", run);
+  inp.addEventListener("keydown", e=>{ if(e.key==="Enter"){ e.preventDefault(); inp.blur(); } });
+  clr.onclick = ()=>{ inp.value=""; run(); inp.focus(); };
+  run();
+}
+function searchResults(q){
+  const t = q.trim().toLowerCase().replace(/\s+/g," ");
+  if(!t) return `<div class="search-hint">모든 달의 내역에서 찾아요.<br>예: 스타벅스, 식비, 현대카드, 5800</div>`;
+  const digits = t.replace(/[,원\s]/g,"");
+  const hit = i => {
+    const hay = [i.m, i.c, methodName(i), i.r].filter(Boolean).join(" ").toLowerCase();
+    if(t.split(" ").every(w=>hay.includes(w))) return true;
+    return /^\d+$/.test(digits) && String(i.a).includes(digits);
+  };
+  const list = items().filter(hit); // items()는 최근 순 (날짜 → 입력 시각)
+  if(!list.length) return `<div class="search-hint">"${esc(q.trim())}"에 맞는 내역이 없어요.</div>`;
+  const out = list.filter(i=>i.t==="out").reduce((s,i)=>s+i.a,0), inc = list.filter(i=>i.t==="in").reduce((s,i)=>s+i.a,0);
+  const shown = list.slice(0,300);
+  return `<div class="search-sum">${list.length}건 · 지출 ${won(out)}원${inc?` · 수입 +${won(inc)}원`:""}${list.length>shown.length?` · 최근 ${shown.length}건만 보여요`:""}</div>` + dayGroups(shown);
+}
 // 분석: 카테고리 비율 띠 + 카테고리별 + 결제수단별 (내역 요약을 눌러 들어옴)
 function renderAnalysis(){
   const ym=S.view, list=items(ym), [y,m]=ym.split("-");
@@ -882,10 +913,11 @@ function renderFilter(){
   $("scroll").scrollTop = 0;
 }
 function renderSheet(){
-  $("gear").hidden = view!=="list"; $("back").hidden = view==="list";
+  $("barLeft").hidden = view!=="list"; $("back").hidden = view==="list";
   $("back").lastChild.textContent = view==="filter" && filterFrom==="analysis" ? "분석" : "내역";
   if(view==="settings") return renderSettings();
   if(view==="analysis") return renderAnalysis();
+  if(view==="search") return renderSearch();
   if(view==="filter") return renderFilter();
   const ym=S.view, list=items(ym), [y,m]=ym.split("-");
   const outs = list.filter(i=>i.t==="out");
