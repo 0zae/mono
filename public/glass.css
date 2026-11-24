@@ -8,7 +8,7 @@ html[data-skin="liquid"]{--home:transparent;
   --ctl-drop:0 2px 8px rgba(80,30,10,.08),0 0 0 .5px rgba(255,255,255,.6);
   --glass:rgba(240,228,221,.40);
   --card-glass:rgba(255,255,255,.62);
-  --sheet-solid:rgba(248,242,238,.82); --slide-blur:blur(24px) saturate(120%);
+  --sheet-solid:transparent; --slide-blur:none; /* 넘김 중 따로 칠하지 않음 → 흰 판 번쩍임 없음 */
   --card-drop:0 6px 18px rgba(80,30,10,.07),0 1px 3px rgba(80,30,10,.05);
   --card-edge:rgba(255,255,255,.7);
   --lg-tint:rgba(255,255,255,.28);
@@ -26,7 +26,7 @@ html[data-skin="liquid"]:not([data-theme="light"]){--home:transparent;
     --ctl-drop:0 2px 8px rgba(0,0,0,.3),0 0 0 .5px rgba(255,255,255,.1);
     --glass:rgba(22,18,16,.45);
     --card-glass:rgba(255,255,255,.07);
-    --sheet-solid:rgba(26,21,19,.82); --slide-blur:blur(24px) saturate(120%);
+    --sheet-solid:transparent; --slide-blur:none;
     --card-drop:0 6px 18px rgba(0,0,0,.35);
     --card-edge:rgba(255,255,255,.14);
     --lg-tint:rgba(255,255,255,.08);

@@ -140,7 +140,6 @@ function applySkin(k){
   try{ localStorage.setItem("mono-skin", S.skin); }catch(e){}
   wall(S.skin==="liquid");
 }
-// liquid 배경: 뿌연 원들이 천천히 떠다니며 서로·벽에 부딪혀 튕긴다 (저해상도 캔버스라 가볍고 저절로 흐릿)
 const wall = (()=>{
   const cv = document.getElementById("wall"), ctx = cv.getContext("2d"), K = .25; // 1/4 해상도
   const dark = matchMedia("(prefers-color-scheme: dark)"), still = matchMedia("(prefers-reduced-motion: reduce)");
@@ -760,7 +759,8 @@ function slide(dir, render){
   sc.style.transform = "translateX(0)";
   ghost.style.transform = `translateX(${dir>0 ? -22 : 100}%)`; ghost.style.opacity = dir>0 ? ".6" : "1";
   // liquid: 덮는 화면이 반투명이라 밑으로 깔리는 이전 화면이 비쳐 보인다 → 이전 화면은 빠르게 투명하게 빠지게
-  if(dir>0 && S.skin==="liquid"){ ghost.style.transition = "transform .42s cubic-bezier(.32,.72,0,1), opacity .2s ease-out"; ghost.style.opacity = "0"; }
+  // liquid: 시트가 반투명이라 화면을 덧칠하지 않고, 나가는 화면은 어느 방향이든 빠르게 투명해지며 빠진다 (흰 판·겹쳐 보임 없이)
+  if(S.skin==="liquid"){ top.style.boxShadow="none"; ghost.style.transition = "transform .42s cubic-bezier(.32,.72,0,1), opacity .12s ease-out"; ghost.style.opacity = "0"; }
   leftNew.style.transform = "translateX(0)"; leftNew.style.opacity = "1";
   oldLabel.style.transform = `translateX(${-dir*shift}px)`; oldLabel.style.opacity = "0";
   const done = ()=>{
@@ -924,7 +924,7 @@ function renderAnalysis(){
   const ym=S.view, list=items(ym), [y,m]=ym.split("-");
   const outs=list.filter(i=>i.t==="out"), out=outs.reduce((s,i)=>s+i.a,0);
   const inc=list.filter(i=>i.t==="in").reduce((s,i)=>s+i.a,0);
-  let h = `<div class="title-row"><h1>${+m}월 분석${y!=String(today.getFullYear())?` <span style="color:var(--label2);font-weight:600;font-size:22px">${y}</span>`:""}</h1><div class="mnav"><button id="aprev" aria-label="이전 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M7.5 2 1.5 8l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button id="anext" aria-label="다음 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M2.5 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>`;
+  let h = `<div class="title-row"><h1>${+m}월${y!=String(today.getFullYear())?` <span style="color:var(--label2);font-weight:600;font-size:22px">${y}</span>`:""}</h1><div class="mnav"><button id="aprev" aria-label="이전 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M7.5 2 1.5 8l6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button><button id="anext" aria-label="다음 달"><svg width="10" height="16" viewBox="0 0 10 16" aria-hidden="true"><path d="M2.5 2l6 6-6 6" fill="none" stroke="currentColor" stroke-width="2.4" stroke-linecap="round" stroke-linejoin="round"/></svg></button></div></div>`;
   h += `<div class="sum"><span class="v num">${won(out)}원</span></div>`;
   if(!outs.length) h += `<div class="empty">${+m}월에는 지출이 없어요.</div>`;
   else{
@@ -1310,7 +1310,7 @@ function openMethod(mid){
   as.querySelectorAll("[data-kind]").forEach(b=>b.onclick=()=>{ kind=b.dataset.kind; kindPicked=true; paintKind(); });
   $("mName").addEventListener("input", ()=>{ if(!kindPicked){ kind=guessKind($("mName").value); paintKind(); } });
   paintKind();
-  setTimeout(()=>$("mName").focus(), 50);
+  // 키보드는 자동으로 올리지 않는다 (칸을 눌러야 올라옴)
   $("mForm").onsubmit=e=>{
     e.preventDefault();
     const name=$("mName").value.trim(); if(!name){ $("mName").focus(); return; }
@@ -1351,7 +1351,7 @@ function openCat(cid){
   as.querySelectorAll("[data-col]").forEach(b=>b.onclick=()=>{ pick=b.dataset.col; paintSel(); });
   custom.addEventListener("input", ()=>{ pick=custom.value.toUpperCase(); paintSel(); });
   paintSel();
-  setTimeout(()=>(isNew?$("cName"):$("cKeys")).focus(), 50);
+  // 키보드는 자동으로 올리지 않는다 (칸을 눌러야 올라옴)
   $("cForm").onsubmit=async e=>{
     e.preventDefault();
     const name=$("cName").value.trim();
@@ -1405,7 +1405,7 @@ function openRec(rid){
   as.querySelectorAll("[data-rc]").forEach(b=>b.onclick=()=>{ cat=b.dataset.rc; catPicked=true; paint(); });
   as.querySelectorAll("[data-rp]").forEach(b=>b.onclick=()=>{ pay=b.dataset.rp; paint(); });
   paint();
-  setTimeout(()=>$("rName").focus(), 50);
+  // 키보드는 자동으로 올리지 않는다 (칸을 눌러야 올라옴)
   $("rForm").onsubmit=async e=>{
     e.preventDefault();
     const name=$("rName").value.trim(), amount=parseAmount($("rAmt").value).amount, day=Math.round(+$("rDay").value);
