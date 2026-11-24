@@ -112,16 +112,20 @@ struct QuickTileView: View {
     @Environment(\.widgetRenderingMode) var mode
     var body: some View {
         let full = mode == .fullColor
-        VStack(alignment: .leading) {
-            Image("LogoGlyph").resizable().scaledToFit().frame(height: 24)
+        // S2: 로고는 왼쪽 위(가로의 2/3 이하), 오른쪽 아래 펜 동그라미 버튼
+        ZStack(alignment: .bottomTrailing) {
+            Image("LogoGlyph").resizable().scaledToFit()
                 .foregroundStyle(full ? .white : .primary).widgetAccentable()
-                .padding(.leading, -8) // 글자 바깥 여백 보정
-            Spacer()
-            HStack(spacing: 6) {
-                Image(systemName: "plus").font(.system(size: 18, weight: .bold))
-                Text("기록하기").font(.system(size: 19, weight: .bold))
+                .containerRelativeFrame(.horizontal) { w, _ in w * 0.62 }
+                .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .topLeading)
+            ZStack {
+                Circle().fill(full ? AnyShapeStyle(.white.opacity(0.25)) : AnyShapeStyle(.primary.opacity(0.15)))
+                PenIcon().stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
+                    .foregroundStyle(full ? .white : .primary).widgetAccentable()
+                    .frame(width: 17, height: 17)
             }
-            .foregroundStyle(full ? .white : .primary)
+            .frame(width: 36, height: 36)
+            .accessibilityLabel("기록하기")
         }
         .frame(maxWidth: .infinity, maxHeight: .infinity, alignment: .leading)
         .containerBackground(for: .widget) {
@@ -152,7 +156,7 @@ struct HomeBarView: View {
             Image("LogoGlyph").resizable().scaledToFit()
                 .foregroundStyle(full ? AnyShapeStyle(monoOrange) : AnyShapeStyle(.primary))
                 .widgetAccentable()
-                .frame(height: 30)
+                .frame(height: 18) // 글자에 딱 맞게 자른 로고라 높이를 줄임 (보이는 크기는 이전과 같음)
             HStack(spacing: 8) {
                 Link(destination: quickURL) {
                     HStack(spacing: 8) {

@@ -158,6 +158,8 @@ html:has(.splash[data-style="none"]):not(.splash-done) :is(.field,.below,.foot){
 .mnav button:disabled{color:var(--label3);cursor:default}
 .mnav svg{display:block}
 .bar .back{display:flex;align-items:center;gap:7px}
+/* 내용이 위로 올라가면 상단 바 아래로 부드럽게 사라짐 (스크롤했을 때만) */
+.scroll.scrolled{-webkit-mask-image:linear-gradient(to bottom,transparent 0,#000 28px);mask-image:linear-gradient(to bottom,transparent 0,#000 28px)}
 .scroll{overflow-y:auto;flex:1;padding:0 16px calc(32px + var(--kb,0px) + env(safe-area-inset-bottom,0px));-webkit-overflow-scrolling:touch}
 h1{font-size:34px;line-height:41px;font-weight:700;letter-spacing:.01em;margin:4px 0 14px}
 .sum{display:flex;flex-direction:column;gap:2px;margin-bottom:22px}

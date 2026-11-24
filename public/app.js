@@ -347,7 +347,7 @@ async function takeSavedReceipt(){
   if(Date.now() - (r.ts||0) > 15*60*1000) return;
   if(r.readable===false || !(r.total>0)) return flash("영수증 금액을 읽지 못했어요. 다시 찍어 주세요.");
   q.value = receiptLine({ merchant:r.merchant, total:Math.round(r.total), date:/^\d{4}-\d{2}-\d{2}$/.test(r.date||"") ? r.date : "", payment:r.payment||"" });
-  preview(); q.focus();
+  preview(); // 앱으로 돌아왔을 때 키보드는 올리지 않는다
 }
 async function readPending(P){ const {value} = await P.get({key:"monoPending"}); try{ return JSON.parse(value||"[]"); }catch(e){ return []; } }
 async function recordParsed(r, x){
@@ -468,7 +468,7 @@ document.addEventListener("visibilitychange", ()=>{ if(document.visibilityState=
 let appReady = false;
 function runSplash(){
   const sp = $("splash"), svg = $("splashSvg"), logoImg = document.querySelector(".logo img");
-  const finish = ()=>{ document.documentElement.classList.add("splash-done"); q.focus(); syncPending(); };
+  const finish = ()=>{ document.documentElement.classList.add("splash-done"); syncPending(); }; // 키보드는 자동으로 올리지 않는다 (입력창을 눌러야 올라옴)
   if(!sp) return finish();
   if(sp.dataset.style==="fade") return splashFade(sp, logoImg, finish);
   if(sp.dataset.style==="none") return splashNone(logoImg, finish);
@@ -533,7 +533,6 @@ function splashNone(logoImg, finish){
     if(reduce) return finish();
     els.forEach((el,k)=>el?.animate([{opacity:0,transform:"translateY(12px)"},{opacity:1,transform:"none"}],{duration:DUR,delay:k*GAP,easing:E,fill:"backwards"}));
     document.documentElement.classList.add("splash-done"); syncPending(); setTimeout(takeSavedReceipt, GAP*4 + DUR); setTimeout(takeQuickAction, GAP + DUR + 50);
-    setTimeout(()=>q.focus(), GAP + DUR); // 입력창 움직임이 끝난 뒤
   };
   requestAnimationFrame(wait);
 }
@@ -1243,7 +1242,7 @@ function sheetToast(msg, undo){
     else { swSet(s.sw, 0, true); if(swOpen===s.sw) swOpen=null; }
   };
   sc.addEventListener("pointerup", end); sc.addEventListener("pointercancel", end);
-  sc.addEventListener("scroll", ()=>{ if(swOpen && !g) swClose(); }, {passive:true});
+  sc.addEventListener("scroll", ()=>{ if(swOpen && !g) swClose(); sc.classList.toggle("scrolled", sc.scrollTop > 2); }, {passive:true});
 }
 
 $("scroll").addEventListener("click", e=>{

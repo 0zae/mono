@@ -3,7 +3,7 @@ html[data-skin="liquid"]{--home:transparent;
   --fill:rgba(255,255,255,.42);
   --cell:rgba(255,255,255,.55);
   --sep:rgba(60,60,67,.14);
-  --pop:rgba(238,222,214,.46);
+  --pop:rgba(246,243,241,.62);
   --ctl:rgba(255,255,255,.74); --ctl-on:rgba(255,255,255,.9);
   --ctl-drop:0 2px 8px rgba(80,30,10,.08),0 0 0 .5px rgba(255,255,255,.6);
   --glass:rgba(240,228,221,.40);
@@ -108,8 +108,8 @@ html[data-skin="liquid"] .sheet-toast button{color:var(--accent)}
 
 /* ---------- 층 구분 강화 ----------
    바탕판(시트·팝업): 따뜻한 색이 도는 투명 유리 / 그 위 버튼·칩·입력칸·카드: 밝고 또렷한 유리 + 그림자 */
-html[data-skin="liquid"] .scrim2{background:rgba(60,28,16,.16);-webkit-backdrop-filter:blur(8px) saturate(120%);backdrop-filter:blur(8px) saturate(120%)}
-html[data-skin="liquid"] .as{-webkit-backdrop-filter:blur(30px) saturate(170%);backdrop-filter:blur(30px) saturate(170%)}
+html[data-skin="liquid"] .scrim2{background:rgba(30,26,26,.14);-webkit-backdrop-filter:blur(8px) saturate(90%);backdrop-filter:blur(8px) saturate(90%)}
+html[data-skin="liquid"] .as{-webkit-backdrop-filter:blur(30px) saturate(110%);backdrop-filter:blur(30px) saturate(110%)} /* 뒤의 주황이 덜 번지게 */
 html[data-skin="liquid"] .as .chips button,html[data-skin="liquid"] .as .kinds button,html[data-skin="liquid"] .as .pop-x,
 html[data-skin="liquid"] .as .pop-foot button,html[data-skin="liquid"] .as .pop-foot .danger-soft,
 html[data-skin="liquid"] .bar button:not(.b),html[data-skin="liquid"] .mnav button,html[data-skin="liquid"] .txm{background:var(--ctl);box-shadow:var(--lg-rim),var(--ctl-drop)}
@@ -127,3 +127,5 @@ html[data-skin="liquid"] .as .sub,html[data-skin="liquid"] .as .hint-line{color:
 html[data-skin="liquid"] .as .dp-nav button{background:var(--ctl);box-shadow:var(--lg-rim),var(--ctl-drop);-webkit-backdrop-filter:var(--lg-blur);backdrop-filter:var(--lg-blur)}
 
 html[data-skin="liquid"] .field .qclr{margin:0 8px 0 4px}
+/* 켜진 스위치는 주황 (위의 바탕색 규칙이 덮어쓰지 않게 더 구체적으로) */
+html[data-skin="liquid"] .as .sw-row input:checked + .tg{background:var(--accent);box-shadow:inset 0 1px 1px rgba(255,255,255,.35)}
