@@ -157,7 +157,7 @@ struct HomeBarView: View {
                 Link(destination: quickURL) {
                     HStack(spacing: 8) {
                         PenIcon() // 앱 입력창과 같은 '펜 + 밑줄' 아이콘
-                            .stroke(style: StrokeStyle(lineWidth: 2, lineCap: .round, lineJoin: .round))
+                            .stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
                             .foregroundStyle(.secondary)
                             .frame(width: 18, height: 18)
                         Text("기록하기").foregroundStyle(.secondary)
@@ -168,7 +168,7 @@ struct HomeBarView: View {
                 }
                 Link(destination: scanURL) {
                     ScanIcon()
-                        .stroke(style: StrokeStyle(lineWidth: 1.8, lineCap: .round, lineJoin: .round))
+                        .stroke(style: StrokeStyle(lineWidth: 1.5, lineCap: .round, lineJoin: .round))
                         .foregroundStyle(full ? AnyShapeStyle(monoOrange) : AnyShapeStyle(.primary))
                         .widgetAccentable()
                         .frame(width: 21, height: 21)

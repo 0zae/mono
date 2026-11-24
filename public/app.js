@@ -895,7 +895,7 @@ let filter = null, listScroll = 0;
 let searchQ = "";
 function renderSearch(){
   $("scroll").innerHTML = `<h1>검색</h1>
-    <label class="search-in"><svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true"><circle cx="7.2" cy="7.2" r="5.7" fill="none" stroke="currentColor" stroke-width="1.9"/><path d="M11.4 11.4 15.6 15.6" stroke="currentColor" stroke-width="1.9" stroke-linecap="round"/></svg><input id="sq" type="search" enterkeyhint="search" autocomplete="off" placeholder="가게, 카테고리, 결제수단, 금액" aria-label="내역 검색"><button class="clr" id="sqClr" type="button" aria-label="지우기" hidden><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.7" stroke-linecap="round"/></svg></button></label>
+    <label class="search-in"><svg width="17" height="17" viewBox="0 0 17 17" aria-hidden="true"><circle cx="7.2" cy="7.2" r="5.7" fill="none" stroke="currentColor" stroke-width="1.5"/><path d="M11.4 11.4 15.6 15.6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg><input id="sq" type="search" enterkeyhint="search" autocomplete="off" placeholder="가게, 카테고리, 결제수단, 금액" aria-label="내역 검색"><button class="clr" id="sqClr" type="button" aria-label="지우기" hidden><svg width="10" height="10" viewBox="0 0 10 10" aria-hidden="true"><path d="M2 2l6 6M8 2l-6 6" stroke="currentColor" stroke-width="1.5" stroke-linecap="round"/></svg></button></label>
     <div id="sres"></div>`;
   const inp=$("sq"), clr=$("sqClr");
   inp.value = searchQ;
